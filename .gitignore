@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+*.err.log
+
+# Local databases
+*.sqlite
+*.sqlite3
+*.db
+
+# Generated/local app data
+data/*
+!data/.gitkeep
+outputs/*
+!outputs/.gitkeep
+
+# Browser automation state
+data/browser-profile/
+data/screenshots/
+
+# Frontend dependencies/build
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Local generated bundles/scratch files
+solo_python.txt
