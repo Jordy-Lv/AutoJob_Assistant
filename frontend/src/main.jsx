@@ -66,13 +66,13 @@ const STATUS_LABELS = {
 };
 
 const NAV_ITEMS = [
-  { key: "dashboard", label: "Inicio", icon: Gauge, hint: "Resumen y siguientes pasos" },
-  { key: "jobs", label: "Ofertas", icon: Briefcase, hint: "Bandeja de oportunidades" },
-  { key: "saved", label: "Búsqueda automática", icon: Bell, hint: "Búsquedas guardadas" },
-  { key: "search", label: "Capturar", icon: Plus, hint: "Buscar, importar URL o pegar LinkedIn" },
-  { key: "documents", label: "Documentos", icon: FileArchive, hint: "CV y carta por oferta" },
-  { key: "profile", label: "Perfil", icon: UserRound, hint: "Tu base profesional" },
-  { key: "settings", label: "Sistema", icon: Database, hint: "Estado de servicios" },
+  { key: "dashboard", label: "Inicio", icon: Gauge, hint: "Resumen y siguiente accion", group: "primary" },
+  { key: "search", label: "Buscar ofertas", icon: Search, hint: "Buscar o capturar oportunidades", group: "primary" },
+  { key: "jobs", label: "Ofertas", icon: Briefcase, hint: "Revisar oportunidades", group: "primary" },
+  { key: "saved", label: "Automatica", icon: Bell, hint: "Busquedas guardadas", group: "secondary" },
+  { key: "documents", label: "Documentos", icon: FileArchive, hint: "CV y carta por oferta", group: "secondary" },
+  { key: "profile", label: "Perfil", icon: UserRound, hint: "Tu base profesional", group: "secondary" },
+  { key: "settings", label: "Configuracion", icon: Database, hint: "Estado tecnico", group: "technical" },
 ];
 
 // Pasos del flujo, visibles en el dashboard como guía clara.
@@ -88,18 +88,16 @@ const FLOW_STEPS = [
 
 const JOB_FILTERS = [
   { key: "all", label: "Todas" },
-  { key: "new", label: "Nuevas (24h)" },
-  { key: "unanalyzed", label: "Sin analizar" },
-  { key: "high", label: "Alta compatibilidad" },
-  { key: "ready", label: "Listas para aplicar" },
+  { key: "new", label: "Nuevas" },
+  { key: "good", label: "Buen match" },
+  { key: "docs", label: "Con documentos" },
   { key: "applied", label: "Aplicadas" },
-  { key: "discarded", label: "Descartadas" },
 ];
 
 function getInitialTheme() {
   const saved = localStorage.getItem(THEME_KEY);
   if (saved === "light" || saved === "dark") return saved;
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return "dark";
 }
 
 // ----------------------------------------------------------------------------
@@ -307,6 +305,11 @@ function App() {
 function TopNav({ view, setView, overview, onRefresh, theme, toggleTheme }) {
   const [navOpen, setNavOpen] = useState(false);
   const healthOk = overview?.health?.ok;
+  const navGroups = [
+    { key: "primary", label: "Flujo principal" },
+    { key: "secondary", label: "Trabajo" },
+    { key: "technical", label: "Admin" },
+  ];
 
   function go(target) {
     setView(target);
@@ -321,7 +324,7 @@ function TopNav({ view, setView, overview, onRefresh, theme, toggleTheme }) {
         <div className="brand-mark" aria-hidden="true">AJ</div>
         <div>
           <strong>AutoJob Assistant</strong>
-          <span>Encuentra ofertas, analiza, prepara CV. Aplica tú.</span>
+          <span>Busca ofertas, prepara documentos y aplica manualmente.</span>
         </div>
       </div>
 
@@ -335,18 +338,23 @@ function TopNav({ view, setView, overview, onRefresh, theme, toggleTheme }) {
         {navOpen ? <X size={18} /> : <Menu size={18} />}
       </button>
 
-      <nav className={`nav-pills ${navOpen ? "open" : ""}`} aria-label="Navegación principal">
-        {NAV_ITEMS.map(({ key, label, icon: Icon, hint }) => (
-          <button
-            key={key}
-            className={view === key ? "active" : ""}
-            onClick={() => go(key)}
-            type="button"
-            title={hint}
-          >
-            <Icon size={16} />
-            <span>{label}</span>
-          </button>
+      <nav className={`nav-pills ${navOpen ? "open" : ""}`} aria-label="Navegacion principal">
+        {navGroups.map((group) => (
+          <div key={group.key} className={`nav-group ${group.key}`}>
+            <span className="nav-group-label">{group.label}</span>
+            {NAV_ITEMS.filter((item) => item.group === group.key).map(({ key, label, icon: Icon, hint }) => (
+              <button
+                key={key}
+                className={view === key ? "active" : ""}
+                onClick={() => go(key)}
+                type="button"
+                title={hint}
+              >
+                <Icon size={16} />
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
         ))}
       </nav>
 
@@ -396,98 +404,90 @@ function Dashboard({ overview, jobs, documents, profile, setView }) {
 
   const nextStep = stepStatus.find((s) => s.state === "current") || stepStatus[stepStatus.length - 1];
   const recommendation = buildPrimaryRecommendation({ nextStep, totalJobs, unanalyzedCount, highPriorityCount, documentsCount, profileProgress });
+  const activeJobs = jobs.filter((job) => !["Aplicada", "Descartada"].includes(job.status));
+  const pendingReviewCount = activeJobs.filter((job) => job.status === "Nueva" || job.is_new || job.score == null).length;
+  const bestScore = jobs.reduce((best, job) => (job.score == null ? best : Math.max(best, Number(job.score))), -1);
+  const bestScoreLabel = bestScore >= 0 ? `${Math.round(bestScore)}%` : "Sin score";
+  const homeAction = profileProgress < 70
+    ? { title: "Completa tu perfil", description: "El perfil mejora el score y la calidad del CV/carta.", target: "profile", icon: UserRound, cta: "Completar perfil" }
+    : recommendation;
+  const summaryCards = [
+    { icon: Briefcase, title: "Ofertas encontradas", value: totalJobs, detail: "Guardadas en tu bandeja", tone: "blue" },
+    { icon: ListChecks, title: "Pendientes de revisar", value: pendingReviewCount, detail: "Nuevas o sin decision", tone: "amber" },
+    { icon: FileArchive, title: "Documentos generados", value: documentsCount, detail: "CV y cartas por oferta", tone: "violet" },
+    { icon: Target, title: "Mejor compatibilidad", value: bestScoreLabel, detail: "Mayor score detectado", tone: "green" },
+  ];
+  const recentJobs = (overview?.new_jobs?.length ? overview.new_jobs : overview?.recent_jobs || jobs).slice(0, 5);
 
   return (
-    <div className="page-stack">
-      <section className="dashboard-intro">
-        <div>
-          <span className="eyebrow">Bienvenido</span>
-          <h1>Tu siguiente paso: {recommendation.title}.</h1>
-          <p>{recommendation.description} Las ofertas se buscan automáticamente. Tú aplicas manualmente desde la oferta original.</p>
-        </div>
-        <div className="intro-actions">
-          <button className="button primary" onClick={() => setView(recommendation.target)} type="button">
-            <recommendation.icon size={16} />
-            {recommendation.cta}
-          </button>
-          <button className="button secondary" onClick={() => setView("jobs")} type="button">
-            Revisar ofertas
-            <ArrowRight size={16} />
-          </button>
-        </div>
-      </section>
-
-      <section className="flow-stepper-section" aria-label="Flujo de 7 pasos">
-        <div className="flow-stepper">
-          {stepStatus.map((step, idx) => (
-            <button
-              key={step.key}
-              className={`flow-step ${step.state}`}
-              onClick={() => setView(step.target)}
-              type="button"
-              title={step.tooltip}
-            >
-              <span className="flow-step-index">{idx + 1}</span>
-              <step.icon size={16} />
-              <strong>{step.label}</strong>
-              <small>{step.detail}</small>
+    <div className="page-stack home-page">
+      <section className="home-hero">
+        <div className="home-hero-copy">
+          <span className="eyebrow">Inicio</span>
+          <h1>{homeAction.title}</h1>
+          <p>{homeAction.description} Despues busca ofertas, revisa matches y aplica manualmente desde la fuente original.</p>
+          <div className="intro-actions">
+            <button className="button primary" onClick={() => setView(homeAction.target)} type="button">
+              <homeAction.icon size={16} />
+              {homeAction.cta}
             </button>
-          ))}
+            <button className="button secondary" onClick={() => setView("search")} type="button">
+              <Search size={16} />
+              Buscar ofertas
+            </button>
+          </div>
         </div>
-      </section>
 
-      <section className="metrics-grid" aria-label="Indicadores principales">
-        <MetricCard icon={Briefcase} title="Ofertas en bandeja" value={totalJobs} detail="Capturadas en PostgreSQL" tone="blue" />
-        <MetricCard icon={Sparkles} title="Nuevas (24h)" value={newCount} detail="Recién encontradas" tone="violet" />
-        <MetricCard icon={WandSparkles} title="Sin analizar" value={unanalyzedCount} detail="Pendientes de score" tone="amber" />
-        <MetricCard icon={Target} title="Alta compatibilidad" value={highPriorityCount} detail="Score ≥ 80%" tone="green" />
-        <MetricCard icon={FileArchive} title="Con CV/carta listos" value={documentsCount} detail="Documentos generados" tone="violet" />
-        <MetricCard icon={CheckCircle2} title="Aplicadas manualmente" value={appliedCount} detail="Tú aplicaste afuera" tone="green" />
-      </section>
-
-      <section className="content-grid two-columns">
-        <Panel icon={Target} title="Mejores oportunidades" action="Score 80% o más">
-          {overview?.priority_jobs?.length ? (
-            <div className="compact-list">
-              {overview.priority_jobs.map((job) => (
-                <CompactJob
-                  key={job.id}
-                  job={job}
-                  actionLabel="Abrir"
-                  onClick={() => setView("jobs")}
-                />
-              ))}
+        <aside className="home-profile-card">
+          <div className="home-profile-header">
+            <UserRound size={18} />
+            <div>
+              <strong>Perfil</strong>
+              <span>{profileProgress < 70 ? "Necesita datos clave" : "Listo para analizar"}</span>
             </div>
-          ) : (
-            <EmptyState
-              icon={Target}
-              title="Aún no hay alta compatibilidad"
-              text="Captura ofertas y ejecuta el análisis para ver cuáles encajan con tu perfil."
-              action="Buscar ofertas"
-              onClick={() => setView("search")}
-            />
-          )}
+          </div>
+          <ProgressBar value={profileProgress} label="Completado" />
+          <button className="button ghost compact" onClick={() => setView("profile")} type="button">
+            Editar perfil
+            <ArrowRight size={14} />
+          </button>
+        </aside>
+      </section>
+
+      <section className="metrics-grid home-summary-grid" aria-label="Resumen simple">
+        {summaryCards.map((item) => (
+          <MetricCard key={item.title} {...item} />
+        ))}
+      </section>
+
+      <section className="content-grid home-bottom-grid">
+        <Panel icon={Sparkles} title="Siguiente accion recomendada" action="Ahora">
+          <div className="next-action-card">
+            <homeAction.icon size={20} />
+            <div>
+              <strong>{homeAction.cta}</strong>
+              <p>{homeAction.description}</p>
+            </div>
+            <button className="button primary compact" onClick={() => setView(homeAction.target)} type="button">
+              Continuar
+              <ArrowRight size={14} />
+            </button>
+          </div>
         </Panel>
 
-        <Panel icon={Clock3} title="Recién capturadas" action="últimas 24h">
-          {overview?.new_jobs?.length ? (
+        <Panel icon={Briefcase} title="Ultimas ofertas" action={`${recentJobs.length} recientes`}>
+          {recentJobs.length ? (
             <div className="compact-list">
-              {overview.new_jobs.map((job) => (
-                <CompactJob key={job.id} job={job} actionLabel="Revisar" onClick={() => setView("jobs")} />
-              ))}
-            </div>
-          ) : overview?.recent_jobs?.length ? (
-            <div className="compact-list">
-              {overview.recent_jobs.slice(0, 5).map((job) => (
-                <CompactJob key={job.id} job={job} actionLabel="Abrir" onClick={() => setView("jobs")} />
+              {recentJobs.map((job) => (
+                <CompactJob key={job.id} job={job} actionLabel="Ver detalle" onClick={() => setView("jobs")} />
               ))}
             </div>
           ) : (
             <EmptyState
-              icon={Briefcase}
-              title="Sin actividad todavía"
-              text="Configura una búsqueda automática o haz una búsqueda manual ahora."
-              action="Empezar a capturar"
+              icon={Search}
+              title="Todavia no hay ofertas"
+              text="Empieza con una busqueda multi-fuente y guarda oportunidades reales en tu bandeja."
+              action="Buscar ofertas"
               onClick={() => setView("search")}
             />
           )}
@@ -495,15 +495,14 @@ function Dashboard({ overview, jobs, documents, profile, setView }) {
       </section>
 
       {profileProgress < 70 && (
-        <section className="profile-banner">
+        <section className="profile-banner compact-banner">
           <div>
             <UserRound size={20} />
             <div>
-              <strong>Completa tu perfil para análisis precisos</strong>
-              <span>Cuanto más completo esté, mejor será el score y los documentos generados.</span>
+              <strong>Completa tu perfil para mejores resultados</strong>
+              <span>Con habilidades, experiencia y rol objetivo, el analisis y los documentos salen mas precisos.</span>
             </div>
           </div>
-          <ProgressBar value={profileProgress} label="Perfil" />
           <button className="button primary" onClick={() => setView("profile")} type="button">
             Completar perfil
             <ArrowRight size={16} />
@@ -513,6 +512,7 @@ function Dashboard({ overview, jobs, documents, profile, setView }) {
     </div>
   );
 }
+
 
 // ----------------------------------------------------------------------------
 // Jobs view — bandeja con filtros claros
@@ -544,13 +544,13 @@ function JobsView({
       <section className="jobs-list-panel">
         <div className="page-heading inline-heading">
           <div>
-            <span className="eyebrow">Bandeja de ofertas</span>
-            <h1>Revisa, analiza y prepara documentos.</h1>
-            <p>Las ofertas se guardan automáticamente. Tú decides cuáles avanzar y aplicas manualmente desde la oferta original.</p>
+            <span className="eyebrow">Ofertas</span>
+            <h1>Revisa oportunidades y decide el siguiente paso.</h1>
+            <p>Filtra, abre el detalle, analiza compatibilidad y aplica manualmente desde la oferta original.</p>
           </div>
           <button className="button primary" onClick={() => setView("search")} type="button">
             <Plus size={16} />
-            Capturar más
+            Buscar mas
           </button>
         </div>
 
@@ -578,23 +578,31 @@ function JobsView({
                 onChange={(e) => setFilters({ ...filters, search: e.target.value })}
               />
             </label>
-            <label className="range-field">
-              <span>Score mínimo</span>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                step="5"
-                value={filters.minScore}
-                onChange={(e) => setFilters({ ...filters, minScore: Number(e.target.value) })}
-              />
-              <output>{filters.minScore}%</output>
-            </label>
             <button className="button secondary compact" onClick={clearFilters} type="button">
               <Filter size={15} />
               Limpiar
             </button>
           </div>
+        </div>
+
+        <div className="mobile-detail-panel">
+          {selectedJob ? (
+            <JobDetail
+              job={selectedJob}
+              documents={selectedDocuments}
+              hasDocuments={documentJobIds.has(selectedJob.id)}
+              onAnalyze={() => onAnalyze(selectedJob)}
+              onGenerate={() => onGenerate(selectedJob)}
+              onStatus={(status) => onStatus(selectedJob, status)}
+              onMarkApplied={() => onMarkApplied(selectedJob)}
+            />
+          ) : (
+            <EmptyState
+              icon={Briefcase}
+              title="Selecciona una oferta"
+              text="Aqui veras compatibilidad, documentos y acciones."
+            />
+          )}
         </div>
 
         <div className="job-card-grid">
@@ -645,48 +653,31 @@ function JobsView({
   );
 }
 
-function JobCard({ job, active, hasDocuments, onSelect, onAnalyze, onGenerate }) {
-  const stepIndex = computeJobStepIndex(job, hasDocuments);
-
+function JobCard({ job, active, hasDocuments, onSelect }) {
   return (
     <article className={`job-card ${active ? "active" : ""}`}>
       <button className="job-card-select" onClick={onSelect} type="button">
         <div className="job-card-top">
-          <div className="job-card-badges">
-            {job.is_new && <span className="new-badge"><Sparkles size={12} /> Nueva</span>}
-            <StatusBadge status={job.status} />
+          <div>
+            <h2>{job.title || "Cargo sin titulo"}</h2>
+            <span>{job.company || "Empresa no indicada"}</span>
           </div>
           <ScorePill value={job.score} />
         </div>
-        <h2>{job.title || "Cargo sin título"}</h2>
         <div className="job-card-meta">
-          <span><Building2 size={14} />{job.company || "Empresa no indicada"}</span>
+          <span><Globe2 size={14} />{job.source || "Fuente"}</span>
           <span><MapPin size={14} />{job.location || "Ubicación no indicada"}</span>
           <span><CalendarDays size={14} />{formatDate(job.first_seen_at || job.created_at)}</span>
         </div>
-        <JobMiniFlow stepIndex={stepIndex} />
+        <div className="job-card-footer">
+          <div className="job-card-badges">
+            {job.is_new && <span className="new-badge"><Sparkles size={12} /> Nueva</span>}
+            <StatusBadge status={job.status} />
+            {hasDocuments && <span className="status-badge active">Docs listos</span>}
+          </div>
+          <span className="detail-link">Ver detalle <ChevronRight size={14} /></span>
+        </div>
       </button>
-
-      <div className="card-actions">
-        {job.score == null && (
-          <button className="button secondary compact" onClick={onAnalyze} type="button">
-            <WandSparkles size={15} />
-            Analizar
-          </button>
-        )}
-        {job.score != null && !hasDocuments && (
-          <button className="button secondary compact" onClick={onGenerate} type="button">
-            <FileText size={15} />
-            Generar CV/carta
-          </button>
-        )}
-        {hasDocuments && (
-          <button className="button ghost compact" onClick={onGenerate} type="button">
-            <RotateCcw size={15} />
-            Regenerar docs
-          </button>
-        )}
-      </div>
     </article>
   );
 }
@@ -704,6 +695,7 @@ function JobMiniFlow({ stepIndex }) {
 
 function JobDetail({ job, documents, hasDocuments, onAnalyze, onGenerate, onStatus, onMarkApplied }) {
   const isAlreadyApplied = job.status === "Aplicada";
+  const scoreText = scoreSummary(job.score);
   return (
     <div className="job-detail">
       <div className="detail-header">
@@ -712,10 +704,13 @@ function JobDetail({ job, documents, hasDocuments, onAnalyze, onGenerate, onStat
             {job.is_new && <span className="new-badge"><Sparkles size={12} /> Nueva</span>}
             <StatusBadge status={job.status} />
           </div>
-          <h2>{job.title || "Oferta sin título"}</h2>
+          <h2>{job.title || "Oferta sin titulo"}</h2>
           <p>{job.company || "Empresa no indicada"} · {job.source || "Fuente"} · {formatDate(job.first_seen_at || job.created_at)}</p>
         </div>
-        <ScorePill value={job.score} large />
+        <div className="detail-score-card">
+          <ScorePill value={job.score} large />
+          <span>{scoreText}</span>
+        </div>
       </div>
 
       <div className="detail-actions">
@@ -725,20 +720,31 @@ function JobDetail({ job, documents, hasDocuments, onAnalyze, onGenerate, onStat
             Analizar compatibilidad
           </button>
         )}
-        {job.score != null && (
-          <button className="button secondary" onClick={onAnalyze} type="button">
-            <RotateCcw size={16} />
-            Recalcular score
-          </button>
-        )}
-        <button className="button secondary" onClick={onGenerate} type="button">
+        <button className={job.score == null ? "button secondary" : "button primary"} onClick={onGenerate} type="button">
           <FileText size={16} />
           {hasDocuments ? "Regenerar CV/carta" : "Generar CV/carta"}
         </button>
+        {job.url ? (
+          <a className="button secondary" href={job.url} target="_blank" rel="noreferrer">
+            <ExternalLink size={16} />
+            Abrir oferta original
+          </a>
+        ) : (
+          <button className="button secondary" disabled type="button">
+            <ExternalLink size={16} />
+            Sin URL original
+          </button>
+        )}
         {!isAlreadyApplied && (
-          <button className="button primary" onClick={onMarkApplied} type="button">
+          <button className="button secondary" onClick={onMarkApplied} type="button">
             <CheckCircle2 size={16} />
             Marcar como aplicada
+          </button>
+        )}
+        {job.score != null && (
+          <button className="button ghost" onClick={onAnalyze} type="button">
+            <RotateCcw size={16} />
+            Recalcular
           </button>
         )}
       </div>
@@ -757,10 +763,10 @@ function JobDetail({ job, documents, hasDocuments, onAnalyze, onGenerate, onStat
           <h3>Por qué encaja</h3>
           {job.reasons?.length ? (
             <ul className="clean-list">
-              {job.reasons.map((r) => <li key={r}>{r}</li>)}
+              {job.reasons.slice(0, 4).map((r) => <li key={r}>{r}</li>)}
             </ul>
           ) : (
-            <p className="muted-line">Ejecuta el análisis para ver razones concretas.</p>
+            <p className="muted-line">Ejecuta el analisis para ver razones concretas.</p>
           )}
         </section>
 
@@ -768,10 +774,10 @@ function JobDetail({ job, documents, hasDocuments, onAnalyze, onGenerate, onStat
           <h3>Brechas a reforzar</h3>
           {job.gaps?.length ? (
             <div className="tag-row">
-              {job.gaps.map((g) => <span key={g}>{g}</span>)}
+              {job.gaps.slice(0, 5).map((g) => <span key={g}>{g}</span>)}
             </div>
           ) : (
-            <p className="muted-line">Sin brechas detectadas todavía.</p>
+            <p className="muted-line">Sin brechas detectadas todavia.</p>
           )}
         </section>
       </div>
@@ -791,24 +797,13 @@ function JobDetail({ job, documents, hasDocuments, onAnalyze, onGenerate, onStat
             ))}
           </div>
         ) : (
-          <p className="muted-line">Aún no hay CV ni carta. Genera los documentos cuando estés listo para aplicar.</p>
+          <p className="muted-line">Aun no hay CV ni carta. Genera los documentos cuando estes listo para aplicar.</p>
         )}
       </section>
 
-      <div className="external-actions">
-        {job.url ? (
-          <a className="button primary" href={job.url} target="_blank" rel="noreferrer">
-            <ExternalLink size={16} />
-            Abrir oferta original para aplicar
-          </a>
-        ) : (
-          <span className="muted-line">No hay URL guardada para esta oferta.</span>
-        )}
-      </div>
-
       <details className="description-box">
-        <summary>Ver descripción guardada</summary>
-        <p>{job.description || "Sin descripción guardada."}</p>
+        <summary>Ver descripcion guardada</summary>
+        <p>{job.description || "Sin descripcion guardada."}</p>
       </details>
     </div>
   );
@@ -930,18 +925,18 @@ function SavedSearchesView({ showToast, reload }) {
     <div className="page-stack">
       <section className="page-heading inline-heading">
         <div>
-          <span className="eyebrow">Búsqueda automática</span>
-          <h1>Configura búsquedas que se repiten solas.</h1>
-          <p>Define una vez tu rol, ubicación y fuentes. El sistema captura ofertas en intervalos definidos y guarda solo las nuevas. Las alertas por Telegram se activan en la siguiente fase.</p>
+          <span className="eyebrow">Busqueda automatica</span>
+          <h1>Deja una busqueda corriendo para encontrar ofertas nuevas.</h1>
+          <p>Crea reglas simples por rol, ubicacion y frecuencia. Cuando se ejecutan, guardan oportunidades nuevas en tu bandeja.</p>
         </div>
         <button className="button primary" onClick={startNew} type="button">
           <Plus size={16} />
-          Nueva búsqueda guardada
+          Crear busqueda automatica
         </button>
       </section>
 
       {editing !== null && (
-        <Panel icon={editing === "new" ? Plus : Filter} title={editing === "new" ? "Crear búsqueda guardada" : "Editar búsqueda"} action="">
+        <Panel icon={editing === "new" ? Plus : Filter} title={editing === "new" ? "Crear busqueda automatica" : "Editar busqueda"} action="">
           <SavedSearchForm form={form} setForm={setForm} sources={sources} />
           <div className="form-footer">
             <button className="button ghost" onClick={cancel} type="button">Cancelar</button>
@@ -953,14 +948,14 @@ function SavedSearchesView({ showToast, reload }) {
         </Panel>
       )}
 
-      <Panel icon={Bell} title="Búsquedas guardadas" action={`${items.length} configuradas`}>
+      <Panel icon={Bell} title="Busquedas automaticas" action={`${items.length} configuradas`}>
         {loading && <p className="muted-line">Cargando...</p>}
         {!loading && !items.length && (
           <EmptyState
             icon={Bell}
-            title="Aún no tienes búsquedas guardadas"
-            text="Crea una para que el sistema escanee ofertas automáticamente cada X minutos."
-            action="Crear primera búsqueda"
+            title="No hay busquedas automaticas"
+            text="Crea una busqueda para revisar fuentes de empleo de forma recurrente."
+            action="Crear busqueda automatica"
             onClick={startNew}
           />
         )}
@@ -971,7 +966,7 @@ function SavedSearchesView({ showToast, reload }) {
                 <header>
                   <div>
                     <strong>{saved.name}</strong>
-                    <span>"{saved.query}" · {saved.location || "cualquier ubicación"} · cada {saved.interval_minutes} min</span>
+                    <span>{saved.query} · {saved.location || "cualquier ubicacion"}</span>
                   </div>
                   <div className="saved-search-status">
                     {saved.enabled ? (
@@ -979,18 +974,13 @@ function SavedSearchesView({ showToast, reload }) {
                     ) : (
                       <span className="status-badge neutral">Pausada</span>
                     )}
-                    {saved.baseline_done ? (
-                      <span className="status-badge success" title="Baseline marcado: a partir de ahora se notifican solo nuevas">Baseline OK</span>
-                    ) : (
-                      <span className="status-badge warning" title="Próxima ejecución se usará como baseline">Sin baseline</span>
-                    )}
                   </div>
                 </header>
                 <div className="saved-search-meta">
-                  <span>Score mínimo: <strong>{saved.score_threshold || 0}%</strong></span>
-                  <span>Fuentes: <strong>{saved.selected_sources?.length || 0}</strong></span>
-                  <span>Última ejecución: <strong>{saved.last_run_at ? formatDate(saved.last_run_at) : "—"}</strong></span>
-                  {saved.last_run_status && <span>Estado: <strong>{saved.last_run_status}</strong></span>}
+                  <span>Frecuencia: <strong>cada {saved.interval_minutes} min</strong></span>
+                  <span>Ultima ejecucion: <strong>{saved.last_run_at ? formatDate(saved.last_run_at) : "Sin ejecutar"}</strong></span>
+                  <span>Nuevas ofertas: <strong>{saved.last_run_status || "Sin datos"}</strong></span>
+                  <span>Fuentes activas: <strong>{saved.selected_sources?.length || 0}</strong></span>
                 </div>
                 <div className="saved-search-actions">
                   <button className="button primary compact" onClick={() => runNow(saved.id)} type="button">
@@ -1106,18 +1096,18 @@ function SearchView({ reload, showToast, setView }) {
   }, []);
 
   const tabs = [
-    { key: "auto", label: "Búsqueda multi-fuente", icon: Globe2 },
+    { key: "auto", label: "Buscar por palabra clave", icon: Globe2 },
     { key: "url", label: "Pegar URL", icon: LinkIcon },
-    { key: "linkedin", label: "Pegar texto (LinkedIn)", icon: FileText },
-    { key: "manual", label: "Registrar manual", icon: Plus },
+    { key: "linkedin", label: "Pegar texto", icon: FileText },
+    { key: "manual", label: "Registrar manualmente", icon: Plus },
   ];
 
   return (
     <div className="page-stack">
       <section className="page-heading">
-        <span className="eyebrow">Capturar ofertas</span>
-        <h1>Cuatro formas de traer una oportunidad a tu bandeja.</h1>
-        <p>Elige la que prefieras. Lo capturado se guarda en PostgreSQL y queda listo para analizar.</p>
+        <span className="eyebrow">Buscar ofertas</span>
+        <h1>Encuentra ofertas reales y guardalas en tu bandeja.</h1>
+        <p>La busqueda multi-fuente es el metodo principal. Tambien puedes pegar una URL, texto de una oferta o registrar una oportunidad manualmente.</p>
       </section>
 
       <div className="filter-segments capture-tabs" role="tablist" aria-label="Modo de captura">
@@ -1154,6 +1144,10 @@ function AutoSearchPanel({ sources, reload, showToast, setView }) {
   useEffect(() => {
     setSelectedSourceIds(sources.filter((s) => s.enabled && s.configured).map((s) => s.id));
   }, [sources]);
+
+  const activeSourceNames = sources
+    .filter((source) => selectedSourceIds.includes(source.id))
+    .map((source) => source.name);
 
   function toggleSource(id) {
     setSelectedSourceIds((cur) => cur.includes(id) ? cur.filter((s) => s !== id) : [...cur, id]);
@@ -1200,7 +1194,7 @@ function AutoSearchPanel({ sources, reload, showToast, setView }) {
   }
 
   return (
-    <Panel icon={Globe2} title="Buscar y guardar ofertas" action="Remotive · Arbeitnow · RemoteOK · Adzuna · SerpAPI">
+    <Panel icon={Globe2} title="Buscar por palabra clave" action="Metodo principal">
       <div className="form-grid">
         <Field label="Rol o palabra clave" value={keywords} onChange={setKeywords} placeholder="java junior, react developer..." />
         <Field label="Ubicación" value={location} onChange={setLocation} placeholder="Remote, Colombia, Berlin..." />
@@ -1214,9 +1208,12 @@ function AutoSearchPanel({ sources, reload, showToast, setView }) {
             <span>Analizar compatibilidad al guardar</span>
           </label>
         </div>
-        <div className="field-wide">
+        <div className="field-wide source-inline">
           <span className="field-label-block">Fuentes activas</span>
-          <div className="source-picker">
+          <strong>{activeSourceNames.length ? activeSourceNames.join(", ") : "Sin fuentes activas"}</strong>
+          <details className="source-settings">
+            <summary>Ajustar fuentes</summary>
+            <div className="source-picker">
             {sources.map((source) => (
               <label key={source.id} className={`source-option ${!source.configured ? "disabled" : ""}`} title={source.error || source.status}>
                 <input
@@ -1238,7 +1235,8 @@ function AutoSearchPanel({ sources, reload, showToast, setView }) {
                 <p>Revisa la conexión del backend y vuelve a intentar.</p>
               </div>
             )}
-          </div>
+            </div>
+          </details>
         </div>
       </div>
       <div className="form-footer">
@@ -1453,8 +1451,8 @@ function DocumentsView({ documents, jobs, onGenerate, setView, setSelectedJobId 
       <section className="page-heading inline-heading">
         <div>
           <span className="eyebrow">Documentos</span>
-          <h1>CV y carta adaptados a cada oferta.</h1>
-          <p>Se generan a partir de tu perfil, ajustados por las habilidades y brechas detectadas. Descárgalos y úsalos al aplicar manualmente.</p>
+          <h1>CV y cartas organizados por oferta.</h1>
+          <p>Abre, descarga o regenera documentos sin revisar bloques repetidos por cada archivo.</p>
         </div>
         <button className="button primary" onClick={() => setView("jobs")} type="button">
           <ArrowRight size={16} />
@@ -1462,33 +1460,27 @@ function DocumentsView({ documents, jobs, onGenerate, setView, setSelectedJobId 
         </button>
       </section>
 
-      <section className="document-type-grid">
-        <DocumentTypeCard icon={FileText} title="CV" text="Versión adaptada al rol y a las habilidades detectadas." count={documents.filter((d) => d.doc_type?.toLowerCase().includes("cv")).length} />
-        <DocumentTypeCard icon={FileText} title="Carta de presentación" text="Mensaje breve y personalizado para la empresa." count={documents.filter((d) => d.doc_type?.toLowerCase().includes("carta")).length} />
-      </section>
-
-      <section className="content-grid two-columns">
-        <Panel icon={FileArchive} title="Archivos generados" action={`${documents.length} documentos`}>
+      <section className="content-grid documents-layout">
+        <Panel icon={FileArchive} title="Documentos por oferta" action={`${groups.length} ofertas`}>
           <div className="document-group-list">
             {groups.map((group) => (
               <article className="document-group" key={group.key}>
                 <header>
                   <div>
                     <strong>{group.title}</strong>
-                    <span>{group.company}</span>
+                    <span>{group.company} · {group.documents.length} documentos</span>
                   </div>
                   {group.job && <ScorePill value={group.job.score} />}
                 </header>
-                <div className="documents-list">
-                  {group.documents.map((doc) => (
-                    <DocumentRow key={`${doc.id || doc.path}-${doc.created_at}`} doc={doc} job={group.job} onRegenerate={onGenerate} />
-                  ))}
+                <DocumentGroupActions documents={group.documents} job={group.job} onRegenerate={onGenerate} />
+                <div className="document-group-footer">
+                  {group.job && <StatusBadge status={group.job.status} />}
+                  {group.job && (
+                    <button className="button ghost compact" onClick={() => { setSelectedJobId(group.job.id); setView("jobs"); }} type="button">
+                      Ver oferta <ChevronRight size={14} />
+                    </button>
+                  )}
                 </div>
-                {group.job && (
-                  <button className="button ghost compact" onClick={() => { setSelectedJobId(group.job.id); setView("jobs"); }} type="button">
-                    Ver oferta <ChevronRight size={14} />
-                  </button>
-                )}
               </article>
             ))}
 
@@ -1504,7 +1496,7 @@ function DocumentsView({ documents, jobs, onGenerate, setView, setSelectedJobId 
           </div>
         </Panel>
 
-        <Panel icon={WandSparkles} title="Sugeridas para preparar" action="alta compatibilidad sin documentos">
+        <Panel icon={WandSparkles} title="Sugeridas para preparar" action="buen match sin documentos">
           <div className="compact-list">
             {jobsWithoutDocs.map((job) => (
               <div className="automation-row" key={job.id}>
@@ -1517,14 +1509,53 @@ function DocumentsView({ documents, jobs, onGenerate, setView, setSelectedJobId 
             {!jobsWithoutDocs.length && (
               <EmptyState
                 icon={CheckCircle2}
-                title="Todo está cubierto"
-                text="Todas las ofertas con score ≥ 60 ya tienen sus documentos preparados."
+                title="Todo esta cubierto"
+                text="Todas las ofertas con buen match ya tienen documentos preparados o no hay pendientes."
               />
             )}
           </div>
         </Panel>
       </section>
     </div>
+  );
+}
+
+function DocumentGroupActions({ documents, job, onRegenerate }) {
+  const cvDoc = documents.find((doc) => doc.doc_type?.toLowerCase().includes("cv"));
+  const letterDoc = documents.find((doc) => doc.doc_type?.toLowerCase().includes("carta"));
+
+  return (
+    <div className="document-action-grid">
+      <DocumentAction doc={cvDoc} label="CV" />
+      <DocumentAction doc={letterDoc} label="Carta" />
+      <button
+        className="button secondary compact"
+        onClick={() => job && onRegenerate(job)}
+        disabled={!job}
+        type="button"
+      >
+        <RotateCcw size={15} />
+        Regenerar documentos
+      </button>
+    </div>
+  );
+}
+
+function DocumentAction({ doc, label }) {
+  if (!doc) {
+    return <span className="document-missing">{label} pendiente</span>;
+  }
+  return (
+    <span className="document-action-pair">
+      <a className="button ghost compact" href={documentViewUrl(doc)} target="_blank" rel="noreferrer">
+        <Eye size={15} />
+        Ver {label}
+      </a>
+      <a className="button ghost compact" href={documentDownloadUrl(doc)} download>
+        <Download size={15} />
+        Descargar {label}
+      </a>
+    </span>
   );
 }
 
@@ -1584,9 +1615,9 @@ function ProfileView({ profile, setProfile, reload, showToast }) {
     <div className="profile-page">
       <aside className="profile-aside">
         <UserRound size={30} />
-        <span className="eyebrow">Paso 1 del flujo</span>
+        <span className="eyebrow">Perfil</span>
         <h2>{form.full_name || "Tu perfil profesional"}</h2>
-        <p>El perfil es la base del análisis de compatibilidad y de los CV/carta que se generan. Cuanto más completo, mejor.</p>
+        <p>La app usa estos datos para calcular compatibilidad y generar CV/carta por oferta.</p>
         <ProgressBar value={completion} label="Perfil completado" />
         <button className="button primary full-width" onClick={save} type="button">
           <CheckCircle2 size={16} />
@@ -1595,9 +1626,8 @@ function ProfileView({ profile, setProfile, reload, showToast }) {
       </aside>
 
       <section className="profile-form">
-        <ProfileSection icon={UserRound} title="Información personal" description="Datos visibles en CV y carta.">
+        <ProfileSection icon={UserRound} title="Informacion basica" description="Datos visibles en los documentos.">
           <Field label="Nombre completo" value={form.full_name} onChange={(v) => update("full_name", v)} />
-          <Field label="Links profesionales" value={form.links} onChange={(v) => update("links", v)} placeholder="LinkedIn, GitHub, portafolio" />
         </ProfileSection>
 
         <ProfileSection icon={Target} title="Rol objetivo" description="Ayuda a priorizar ofertas y ajustar el mensaje.">
@@ -1612,7 +1642,7 @@ function ProfileView({ profile, setProfile, reload, showToast }) {
           />
         </ProfileSection>
 
-        <ProfileSection icon={Layers3} title="Stack tecnológico" description="Lista tecnologías separadas por coma o salto de línea.">
+        <ProfileSection icon={Layers3} title="Habilidades" description="Tecnologias y herramientas separadas por coma o salto de linea.">
           <Field
             label="Habilidades y herramientas"
             textarea
@@ -1633,7 +1663,7 @@ function ProfileView({ profile, setProfile, reload, showToast }) {
           />
         </ProfileSection>
 
-        <ProfileSection icon={FileText} title="Educación" description="Formación, cursos o certificaciones.">
+        <ProfileSection icon={FileText} title="Educacion" description="Formacion, cursos o certificaciones.">
           <Field
             label="Educación"
             textarea
@@ -1650,6 +1680,17 @@ function ProfileView({ profile, setProfile, reload, showToast }) {
             className="field-wide"
             value={form.projects}
             onChange={(v) => update("projects", v)}
+          />
+        </ProfileSection>
+
+        <ProfileSection icon={Globe2} title="Links" description="LinkedIn, GitHub, portafolio o sitio personal.">
+          <Field
+            label="Links profesionales"
+            textarea
+            className="field-wide"
+            value={form.links}
+            onChange={(v) => update("links", v)}
+            placeholder="LinkedIn, GitHub, portafolio"
           />
         </ProfileSection>
 
@@ -1675,9 +1716,9 @@ function SettingsView({ overview }) {
   return (
     <div className="page-stack">
       <section className="page-heading">
-        <span className="eyebrow">Sistema</span>
-        <h1>Estado de servicios.</h1>
-        <p>AutoJob Assistant busca, analiza y prepara documentos. <strong>No aplica automáticamente</strong>: el envío final lo haces tú desde la oferta original.</p>
+        <span className="eyebrow">Configuracion</span>
+        <h1>Estado tecnico de la app.</h1>
+        <p>Informacion de soporte para revisar conexion, fuentes y servicios opcionales.</p>
       </section>
 
       <section className="settings-grid">
@@ -1960,11 +2001,9 @@ function buildFilterCounts(jobs, documentJobIds) {
   return {
     all: jobs.length,
     new: jobs.filter((j) => j.is_new).length,
-    unanalyzed: jobs.filter((j) => j.score == null && !["Aplicada", "Descartada"].includes(j.status)).length,
-    high: jobs.filter((j) => (j.score || 0) >= 80 && !["Aplicada", "Descartada"].includes(j.status)).length,
-    ready: jobs.filter((j) => (j.status === "Lista para aplicar" || (documentJobIds.has(j.id) && j.status !== "Aplicada" && j.status !== "Descartada"))).length,
+    good: jobs.filter((j) => (j.score || 0) >= 60 && !["Aplicada", "Descartada"].includes(j.status)).length,
+    docs: jobs.filter((j) => documentJobIds.has(j.id)).length,
     applied: jobs.filter((j) => j.status === "Aplicada").length,
-    discarded: jobs.filter((j) => j.status === "Descartada").length,
   };
 }
 
@@ -1986,11 +2025,9 @@ function filterJobs(jobs, filters, documentJobIds) {
     const matchesCategory =
       cat === "all" ||
       (cat === "new" && job.is_new) ||
-      (cat === "unanalyzed" && job.score == null && !["Aplicada", "Descartada"].includes(job.status)) ||
-      (cat === "high" && (job.score || 0) >= 80 && !["Aplicada", "Descartada"].includes(job.status)) ||
-      (cat === "ready" && (job.status === "Lista para aplicar" || (documentJobIds.has(job.id) && !["Aplicada", "Descartada"].includes(job.status)))) ||
-      (cat === "applied" && job.status === "Aplicada") ||
-      (cat === "discarded" && job.status === "Descartada");
+      (cat === "good" && (job.score || 0) >= 60 && !["Aplicada", "Descartada"].includes(job.status)) ||
+      (cat === "docs" && documentJobIds.has(job.id)) ||
+      (cat === "applied" && job.status === "Aplicada");
 
     return matchesQuery && matchesScore && matchesCategory;
   });
@@ -2056,6 +2093,14 @@ function scoreClass(value) {
   if (value >= 80) return "high";
   if (value >= 60) return "medium";
   return "low";
+}
+
+function scoreSummary(value) {
+  if (value == null) return "Analisis pendiente";
+  if (value >= 80) return "Match fuerte";
+  if (value >= 60) return "Buen match";
+  if (value >= 40) return "Match parcial";
+  return "Bajo encaje";
 }
 
 function formatDate(value) {
