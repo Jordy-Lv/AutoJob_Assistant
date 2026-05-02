@@ -1164,6 +1164,10 @@ function AutoSearchPanel({ sources, reload, showToast, setView }) {
       showToast("Escribe al menos 2 caracteres en la búsqueda.", "error");
       return;
     }
+    if (!selectedSourceIds.length) {
+      showToast("Activa al menos una fuente para buscar.", "error");
+      return;
+    }
     setRunning(true);
     try {
       const result = await request("/api/search/jobs", {
@@ -1227,6 +1231,13 @@ function AutoSearchPanel({ sources, reload, showToast, setView }) {
                 </span>
               </label>
             ))}
+            {!sources.length && (
+              <div className="empty-state compact">
+                <Search size={18} />
+                <strong>Fuentes no cargadas</strong>
+                <p>Revisa la conexión del backend y vuelve a intentar.</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1235,7 +1246,7 @@ function AutoSearchPanel({ sources, reload, showToast, setView }) {
           <Bell size={16} />
           Convertir en búsqueda automática
         </button>
-        <button className="button primary" onClick={run} disabled={running} type="button">
+        <button className="button primary" onClick={run} disabled={running || !selectedSourceIds.length} type="button">
           <Search size={16} />
           {running ? "Buscando..." : "Buscar y guardar ahora"}
         </button>
