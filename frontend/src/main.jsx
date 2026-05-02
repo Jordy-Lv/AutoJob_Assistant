@@ -69,7 +69,7 @@ const NAV_ITEMS = [
   { key: "dashboard", label: "Inicio", icon: Gauge, hint: "Resumen y siguiente accion", group: "primary" },
   { key: "search", label: "Buscar ofertas", icon: Search, hint: "Buscar o capturar oportunidades", group: "primary" },
   { key: "jobs", label: "Ofertas", icon: Briefcase, hint: "Revisar oportunidades", group: "primary" },
-  { key: "saved", label: "Automatica", icon: Bell, hint: "Busquedas guardadas", group: "secondary" },
+  { key: "saved", label: "Automatizacion", icon: Bell, hint: "Busquedas automaticas", group: "secondary" },
   { key: "documents", label: "Documentos", icon: FileArchive, hint: "CV y carta por oferta", group: "secondary" },
   { key: "profile", label: "Perfil", icon: UserRound, hint: "Tu base profesional", group: "secondary" },
   { key: "settings", label: "Configuracion", icon: Database, hint: "Estado tecnico", group: "technical" },
@@ -266,6 +266,7 @@ function App() {
                 selectedJob={selectedJob}
                 setSelectedJobId={setSelectedJobId}
                 setView={setView}
+                profile={profile}
                 onAnalyze={analyze}
                 onGenerate={generateDocuments}
                 onStatus={updateStatus}
@@ -408,6 +409,11 @@ function Dashboard({ overview, jobs, documents, profile, setView }) {
   const pendingReviewCount = activeJobs.filter((job) => job.status === "Nueva" || job.is_new || job.score == null).length;
   const bestScore = jobs.reduce((best, job) => (job.score == null ? best : Math.max(best, Number(job.score))), -1);
   const bestScoreLabel = bestScore >= 0 ? `${Math.round(bestScore)}%` : "Sin score";
+  const bestScoreDetail = bestScore >= 60
+    ? "Mayor score detectado"
+    : profileProgress < 70
+      ? "Mejora al completar el perfil"
+      : "Aun hay margen para afinar";
   const homeAction = profileProgress < 70
     ? { title: "Completa tu perfil", description: "El perfil mejora el score y la calidad del CV/carta.", target: "profile", icon: UserRound, cta: "Completar perfil" }
     : recommendation;
@@ -415,9 +421,9 @@ function Dashboard({ overview, jobs, documents, profile, setView }) {
     { icon: Briefcase, title: "Ofertas encontradas", value: totalJobs, detail: "Guardadas en tu bandeja", tone: "blue" },
     { icon: ListChecks, title: "Pendientes de revisar", value: pendingReviewCount, detail: "Nuevas o sin decision", tone: "amber" },
     { icon: FileArchive, title: "Documentos generados", value: documentsCount, detail: "CV y cartas por oferta", tone: "violet" },
-    { icon: Target, title: "Mejor compatibilidad", value: bestScoreLabel, detail: "Mayor score detectado", tone: "green" },
+    { icon: Target, title: "Mejor match actual", value: bestScoreLabel, detail: bestScoreDetail, tone: "green" },
   ];
-  const recentJobs = (overview?.new_jobs?.length ? overview.new_jobs : overview?.recent_jobs || jobs).slice(0, 5);
+  const recentJobs = (overview?.new_jobs?.length ? overview.new_jobs : overview?.recent_jobs || jobs).slice(0, 3);
 
   return (
     <div className="page-stack home-page">
@@ -465,7 +471,7 @@ function Dashboard({ overview, jobs, documents, profile, setView }) {
           <div className="next-action-card">
             <homeAction.icon size={20} />
             <div>
-              <strong>{homeAction.cta}</strong>
+              <strong>{homeAction.title}</strong>
               <p>{homeAction.description}</p>
             </div>
             <button className="button primary compact" onClick={() => setView(homeAction.target)} type="button">
@@ -477,10 +483,14 @@ function Dashboard({ overview, jobs, documents, profile, setView }) {
 
         <Panel icon={Briefcase} title="Ultimas ofertas" action={`${recentJobs.length} recientes`}>
           {recentJobs.length ? (
-            <div className="compact-list">
+            <div className="compact-list recent-jobs-list">
               {recentJobs.map((job) => (
                 <CompactJob key={job.id} job={job} actionLabel="Ver detalle" onClick={() => setView("jobs")} />
               ))}
+              <button className="button ghost compact recent-jobs-more" onClick={() => setView("jobs")} type="button">
+                Ver todas
+                <ArrowRight size={14} />
+              </button>
             </div>
           ) : (
             <EmptyState
@@ -531,9 +541,11 @@ function JobsView({
   onGenerate,
   onStatus,
   onMarkApplied,
+  profile,
 }) {
   const counts = useMemo(() => buildFilterCounts(jobs, documentJobIds), [jobs, documentJobIds]);
   const selectedDocuments = selectedJob ? documents.filter((doc) => doc.job_id === selectedJob.id) : [];
+  const profileProgress = profileCompletion(profile);
 
   function clearFilters() {
     setFilters({ category: "all", search: "", minScore: 0 });
@@ -591,6 +603,8 @@ function JobsView({
               job={selectedJob}
               documents={selectedDocuments}
               hasDocuments={documentJobIds.has(selectedJob.id)}
+              profileProgress={profileProgress}
+              onCompleteProfile={() => setView("profile")}
               onAnalyze={() => onAnalyze(selectedJob)}
               onGenerate={() => onGenerate(selectedJob)}
               onStatus={(status) => onStatus(selectedJob, status)}
@@ -636,6 +650,8 @@ function JobsView({
             job={selectedJob}
             documents={selectedDocuments}
             hasDocuments={documentJobIds.has(selectedJob.id)}
+            profileProgress={profileProgress}
+            onCompleteProfile={() => setView("profile")}
             onAnalyze={() => onAnalyze(selectedJob)}
             onGenerate={() => onGenerate(selectedJob)}
             onStatus={(status) => onStatus(selectedJob, status)}
@@ -693,9 +709,23 @@ function JobMiniFlow({ stepIndex }) {
   );
 }
 
-function JobDetail({ job, documents, hasDocuments, onAnalyze, onGenerate, onStatus, onMarkApplied }) {
+function JobDetail({
+  job,
+  documents,
+  hasDocuments,
+  profileProgress = 0,
+  onCompleteProfile,
+  onAnalyze,
+  onGenerate,
+  onStatus,
+  onMarkApplied,
+}) {
   const isAlreadyApplied = job.status === "Aplicada";
   const scoreText = scoreSummary(job.score);
+  const profileIncomplete = profileProgress < 70;
+  const lowScore = job.score != null && Number(job.score) < 60;
+  const generateIsPrimary = !profileIncomplete && !lowScore && job.score != null;
+  const openOriginalIsPrimary = !profileIncomplete && lowScore && Boolean(job.url);
   return (
     <div className="job-detail">
       <div className="detail-header">
@@ -714,18 +744,30 @@ function JobDetail({ job, documents, hasDocuments, onAnalyze, onGenerate, onStat
       </div>
 
       <div className="detail-actions">
-        {job.score == null && (
+        {profileIncomplete && onCompleteProfile && (
+          <button className="button primary" onClick={onCompleteProfile} type="button">
+            <UserRound size={16} />
+            Completar perfil
+          </button>
+        )}
+        {profileIncomplete && job.score == null && (
+          <button className="button secondary" onClick={onAnalyze} type="button">
+            <WandSparkles size={16} />
+            Analizar ahora
+          </button>
+        )}
+        {!profileIncomplete && job.score == null && (
           <button className="button primary" onClick={onAnalyze} type="button">
             <WandSparkles size={16} />
             Analizar compatibilidad
           </button>
         )}
-        <button className={job.score == null ? "button secondary" : "button primary"} onClick={onGenerate} type="button">
+        <button className={generateIsPrimary ? "button primary" : "button secondary"} onClick={onGenerate} type="button">
           <FileText size={16} />
           {hasDocuments ? "Regenerar CV/carta" : "Generar CV/carta"}
         </button>
         {job.url ? (
-          <a className="button secondary" href={job.url} target="_blank" rel="noreferrer">
+          <a className={openOriginalIsPrimary ? "button primary" : "button secondary"} href={job.url} target="_blank" rel="noreferrer">
             <ExternalLink size={16} />
             Abrir oferta original
           </a>
@@ -748,6 +790,16 @@ function JobDetail({ job, documents, hasDocuments, onAnalyze, onGenerate, onStat
           </button>
         )}
       </div>
+
+      {profileIncomplete && (
+        <div className="profile-nudge">
+          <UserRound size={16} />
+          <div>
+            <strong>Completa tu perfil para obtener un analisis mas preciso.</strong>
+            <span>Los scores bajos pueden reflejar datos faltantes, no necesariamente una mala oportunidad.</span>
+          </div>
+        </div>
+      )}
 
       <label className="field">
         <span>Estado</span>

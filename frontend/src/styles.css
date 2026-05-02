@@ -2931,3 +2931,424 @@ strong,
     flex-direction: column;
   }
 }
+
+/* Refinement pass 2: lighter density for shell, home, and offers. */
+:root[data-theme="dark"] {
+  --bg: #0d1216;
+  --surface: #131a20;
+  --surface-2: #0f151a;
+  --surface-3: #182128;
+  --border: #22303a;
+  --border-strong: #31424f;
+}
+
+.product-nav {
+  background: color-mix(in srgb, var(--nav-bg) 88%, transparent);
+}
+
+.brand-mark {
+  width: 36px;
+  height: 36px;
+  font-size: 0.88rem;
+}
+
+.brand-lockup {
+  gap: 10px;
+}
+
+.brand-lockup strong {
+  font-size: 0.98rem;
+}
+
+.brand-lockup span {
+  max-width: 170px;
+  white-space: normal;
+  font-size: 0.76rem;
+  line-height: 1.32;
+}
+
+.nav-pills button {
+  min-height: 36px;
+  padding: 0 10px;
+  font-size: 0.84rem;
+  color: color-mix(in srgb, var(--muted) 86%, var(--text));
+}
+
+.nav-pills button.active {
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
+}
+
+.nav-group-label {
+  color: color-mix(in srgb, var(--subtle) 82%, transparent);
+}
+
+.system-chip {
+  min-height: 34px;
+  padding: 0 9px;
+  background: transparent;
+  color: var(--subtle);
+  font-size: 0.78rem;
+}
+
+.system-chip svg {
+  opacity: 0.72;
+}
+
+.nav-actions {
+  gap: 7px;
+}
+
+.nav-actions .icon-button {
+  width: 36px;
+  min-height: 36px;
+}
+
+.nav-capture {
+  min-height: 38px;
+  font-size: 0.86rem;
+}
+
+.workspace {
+  width: min(1320px, calc(100% - 32px));
+  padding: 20px 0 42px;
+}
+
+.page-stack {
+  gap: 14px;
+}
+
+.page-heading,
+.home-hero,
+.filters-panel,
+.panel,
+.job-detail-panel,
+.mobile-detail-panel {
+  border-color: color-mix(in srgb, var(--border) 82%, transparent);
+}
+
+.page-heading {
+  padding: 18px;
+}
+
+.page-heading h1,
+.home-hero h1 {
+  font-size: clamp(1.35rem, 1.9vw, 2.05rem);
+  line-height: 1.12;
+}
+
+.page-heading p,
+.home-hero p {
+  font-size: 0.94rem;
+  line-height: 1.5;
+}
+
+.eyebrow {
+  margin-bottom: 6px;
+  font-size: 0.7rem;
+}
+
+.home-hero {
+  padding: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 300px);
+  gap: 16px;
+}
+
+.home-hero-copy {
+  gap: 10px;
+}
+
+.home-profile-card {
+  padding: 13px;
+  gap: 9px;
+  border-color: color-mix(in srgb, var(--border) 75%, transparent);
+}
+
+.home-summary-grid {
+  gap: 10px;
+}
+
+.home-summary-grid .metric-card,
+.metric-card {
+  min-height: 112px;
+  padding: 12px;
+  gap: 6px;
+}
+
+.metric-icon {
+  width: 32px;
+  height: 32px;
+}
+
+.metric-card strong {
+  font-size: 1.55rem;
+}
+
+.metric-card span {
+  font-size: 0.86rem;
+}
+
+.metric-card p {
+  font-size: 0.8rem;
+}
+
+.home-bottom-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.8fr);
+}
+
+.home-bottom-grid .panel:first-child {
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--border));
+  background: color-mix(in srgb, var(--primary) 4%, var(--surface));
+}
+
+.next-action-card {
+  padding: 13px;
+  gap: 10px;
+  background: color-mix(in srgb, var(--primary) 5%, var(--surface-2));
+}
+
+.next-action-card > svg {
+  width: 18px;
+  height: 18px;
+}
+
+.recent-jobs-list {
+  gap: 8px;
+}
+
+.recent-jobs-more {
+  justify-self: start;
+}
+
+.compact-job {
+  padding: 10px 11px;
+}
+
+.compact-job .score-pill {
+  min-width: 58px;
+}
+
+.jobs-page {
+  grid-template-columns: minmax(540px, 0.9fr) minmax(340px, 0.55fr);
+  gap: 14px;
+}
+
+.jobs-list-panel {
+  gap: 12px;
+}
+
+.jobs-list-panel .page-heading {
+  padding: 16px;
+}
+
+.jobs-list-panel .page-heading h1 {
+  max-width: 560px;
+}
+
+.filters-panel {
+  padding: 10px;
+  gap: 10px;
+}
+
+.filter-segments {
+  gap: 6px;
+}
+
+.filter-segments button {
+  min-height: 31px;
+  padding: 0 9px;
+  font-size: 0.78rem;
+}
+
+.filter-segments button strong {
+  min-width: 20px;
+  height: 19px;
+  font-size: 0.7rem;
+}
+
+.filter-controls {
+  gap: 8px;
+}
+
+.search-field input {
+  min-height: 38px;
+}
+
+.job-card-select {
+  padding: 12px;
+  gap: 8px;
+}
+
+.job-card-top h2 {
+  font-size: 0.94rem;
+}
+
+.job-card-top span {
+  font-size: 0.8rem;
+}
+
+.job-card-meta {
+  font-size: 0.78rem;
+}
+
+.job-card-footer {
+  margin-top: 2px;
+}
+
+.score-pill {
+  min-width: 62px;
+  min-height: 29px;
+  font-size: 0.78rem;
+  background: var(--surface-3);
+  color: var(--muted);
+}
+
+.score-pill.low {
+  background: var(--surface-3);
+  color: var(--muted);
+}
+
+.score-pill.large {
+  min-width: 78px;
+  min-height: 46px;
+  font-size: 1rem;
+}
+
+.job-detail-panel {
+  padding: 14px;
+}
+
+.job-detail {
+  gap: 12px;
+}
+
+.detail-header {
+  gap: 12px;
+}
+
+.detail-header h2 {
+  font-size: 1.08rem;
+}
+
+.detail-score-card {
+  min-width: 104px;
+  padding: 8px;
+  gap: 6px;
+}
+
+.detail-score-card span {
+  font-size: 0.76rem;
+}
+
+.detail-actions {
+  gap: 7px;
+}
+
+.detail-actions .button,
+.detail-actions a.button {
+  min-height: 36px;
+  font-size: 0.82rem;
+}
+
+.detail-actions .button.ghost {
+  min-height: 30px;
+  color: var(--subtle);
+  font-size: 0.78rem;
+}
+
+.profile-nudge {
+  border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--primary) 6%, var(--surface-2));
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 9px;
+  padding: 10px;
+}
+
+.profile-nudge svg {
+  color: var(--primary);
+  margin-top: 2px;
+}
+
+.profile-nudge strong,
+.profile-nudge span {
+  display: block;
+}
+
+.profile-nudge strong {
+  font-size: 0.84rem;
+}
+
+.profile-nudge span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  margin-top: 3px;
+}
+
+@media (min-width: 1180px) {
+  .product-shell {
+    grid-template-columns: 244px minmax(0, 1fr);
+  }
+
+  .product-nav {
+    padding: 14px;
+  }
+
+  .nav-pills {
+    gap: 15px;
+  }
+
+  .nav-group {
+    gap: 5px;
+  }
+
+  .nav-group-label {
+    padding: 0 8px;
+    font-size: 0.68rem;
+  }
+
+  .workspace {
+    padding-top: 20px;
+  }
+}
+
+@media (max-width: 1180px) {
+  .home-hero,
+  .home-bottom-grid,
+  .jobs-page {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .workspace {
+    width: min(100% - 24px, 1320px);
+  }
+
+  .home-hero,
+  .page-heading,
+  .panel {
+    padding: 14px;
+  }
+
+  .home-hero {
+    gap: 12px;
+  }
+
+  .home-hero p {
+    font-size: 0.9rem;
+  }
+
+  .home-profile-card {
+    padding: 12px;
+  }
+
+  .home-summary-grid {
+    gap: 8px;
+  }
+
+  .home-summary-grid .metric-card {
+    min-height: 102px;
+  }
+}
