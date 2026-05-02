@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const configuredApiUrl = env.VITE_API_URL || "http://127.0.0.1:8000";
+  const configuredApiUrl = env.VITE_API_URL || "http://127.0.0.1:8501";
   const proxyTarget = env.VITE_API_PROXY_TARGET || configuredApiUrl.replace(/\/api\/?$/, "");
 
   return {
