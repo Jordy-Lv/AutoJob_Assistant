@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
+from urllib.parse import urlparse
 
 from autojob.models import JobOffer, SearchParams
 
@@ -93,8 +95,195 @@ def first_apply_link(raw_job: dict[str, Any]) -> str:
     return compact(raw_job.get("share_link"))
 
 
+class SerpAPILinkedInProvider(SerpAPIProvider):
+    source_id = "serpapi_linkedin"
+    display_name = "LinkedIn via SerpAPI"
+
+    def search(self, params: SearchParams) -> list[JobOffer]:
+        limit = max(min(int(params.limit or 25), 50), 1)
+        candidate_limit = min(limit * 3, 100)
+        page_size = 10
+        max_requests = max(min(int(os.getenv("SERPAPI_LINKEDIN_MAX_REQUESTS", "10") or 10), 10), 1)
+        pages_per_query = max(min(int(os.getenv("SERPAPI_LINKEDIN_PAGES_PER_QUERY", "2") or 2), 5), 1)
+        date_tbs = google_date_tbs(params.date_filter)
+        jobs: list[JobOffer] = []
+        seen_urls: set[str] = set()
+        requests_used = 0
+
+        for query in linkedin_queries(params):
+            start = 0
+            pages_for_query = 0
+            while requests_used < max_requests and pages_for_query < pages_per_query and len(jobs) < candidate_limit:
+                request_params: dict[str, Any] = {
+                    "engine": "google",
+                    "q": query,
+                    "num": page_size,
+                    "start": start,
+                    "api_key": os.getenv("SERPAPI_KEY", ""),
+                }
+                if date_tbs:
+                    request_params["tbs"] = date_tbs
+
+                payload = self._get_json(self.endpoint, request_params)
+                requests_used += 1
+                pages_for_query += 1
+                if isinstance(payload, dict) and payload.get("error"):
+                    if "hasn't returned any results" not in str(payload.get("error")):
+                        raise RuntimeError(str(payload.get("error")))
+                    break
+
+                items = payload.get("organic_results", []) if isinstance(payload, dict) else []
+                linkedin_items = [
+                    item
+                    for item in items
+                    if isinstance(item, dict) and is_linkedin_job_url(compact(item.get("link")))
+                ]
+                for item in linkedin_items:
+                    url = compact(item.get("link"))
+                    if url.lower() in seen_urls:
+                        continue
+                    seen_urls.add(url.lower())
+                    job = self.normalize(item)
+                    job.location = linkedin_location(item, params)
+                    if params.remote_only:
+                        job.remote = True
+                    jobs.append(job)
+                    if len(jobs) >= candidate_limit:
+                        break
+
+                if len(items) < page_size:
+                    break
+                start += page_size
+
+            if requests_used >= max_requests or len(jobs) >= candidate_limit:
+                break
+
+        return jobs
+
+    def normalize(self, raw_job: dict[str, Any]) -> JobOffer:
+        title = compact(raw_job.get("title")) or "LinkedIn job"
+        link = compact(raw_job.get("link"))
+        description = compact(raw_job.get("snippet"))
+        role, company = split_linkedin_title(title)
+        return JobOffer(
+            source=self.display_name,
+            external_id=linkedin_external_id(link) or stable_external_id(link, title),
+            title=role,
+            company=company,
+            location="",
+            url=link,
+            description=description,
+            tags=dedupe_text(["LinkedIn", "SerpAPI"]),
+            published_at=compact(raw_job.get("date")),
+            remote="remote" in " ".join([title, description]).lower(),
+            seniority=infer_seniority(title, description, ["LinkedIn"]),
+            employment_type=normalize_employment_type("", title, ["LinkedIn"]),
+        )
+
+    def _health_request(self) -> None:
+        self.search(SearchParams(query="java developer remote", limit=1))
+
+
 def serpapi_location(location: str) -> str:
     cleaned = compact(location)
     if cleaned.lower() in {"", "remote", "remoto", "anywhere", "worldwide"}:
         return os.getenv("SERPAPI_LOCATION", "United States").strip() or "United States"
     return cleaned
+
+
+def linkedin_queries(params: SearchParams) -> list[str]:
+    terms = compact(params.query)
+    expanded_terms = linkedin_expand_role_terms(terms)
+    remote_term = "remote" if params.remote_only and "remote" not in terms.lower() else ""
+    location = compact(params.location)
+    scoped_location = "" if location.lower() in {"", "remote", "remoto", "anywhere", "worldwide"} else location
+    variants = [
+        " ".join(part for part in [terms, remote_term, scoped_location] if part),
+        " ".join(part for part in [expanded_terms, remote_term, scoped_location] if part),
+        " ".join(part for part in [terms, scoped_location] if part),
+        " ".join(part for part in [terms, remote_term] if part),
+        expanded_terms,
+        terms,
+    ]
+    return [f"site:linkedin.com/jobs/view {variant}" for variant in dedupe_text(variants) if variant]
+
+
+def linkedin_expand_role_terms(query: str) -> str:
+    lowered = query.lower()
+    if any(word in lowered for word in ("developer", "engineer", "analyst", "scientist", "devops", "qa")):
+        return query
+    return f"{query} developer"
+
+
+def google_date_tbs(date_filter: str) -> str:
+    return {
+        "24h": "qdr:d",
+        "1d": "qdr:d",
+        "day": "qdr:d",
+        "7d": "qdr:w",
+        "week": "qdr:w",
+        "30d": "qdr:m",
+        "month": "qdr:m",
+    }.get((date_filter or "").strip().lower(), "")
+
+
+def linkedin_location(raw_job: dict[str, Any], params: SearchParams) -> str:
+    title = compact(raw_job.get("title"))
+    snippet = compact(raw_job.get("snippet"))
+    detected = extract_linkedin_location(f"{title}. {snippet}")
+    if detected:
+        return detected
+    requested = compact(params.location)
+    if params.remote_only and requested and requested.lower() not in {"remote", "remoto", "anywhere", "worldwide"}:
+        return f"Remote / {requested}"
+    if params.remote_only:
+        return "Remote"
+    return requested
+
+
+def extract_linkedin_location(text: str) -> str:
+    match = re.search(r"\bin\s+([A-Z][A-Za-z .,&-]{2,60})(?:\s+\||\.|,|\s+\d+\s+days?\s+ago|$)", text)
+    if not match:
+        return ""
+    value = compact(match.group(1)).strip(" .,-")
+    stop_words = {"United", "Latin", "Remote"}
+    return value if value and value not in stop_words else ""
+
+
+def is_linkedin_job_url(url: str) -> bool:
+    if not url:
+        return False
+    parsed = urlparse(url)
+    host = (parsed.netloc or "").lower()
+    path = (parsed.path or "").lower()
+    return host.endswith("linkedin.com") and "/jobs/view/" in path
+
+
+def linkedin_external_id(url: str) -> str:
+    path = urlparse(url).path.strip("/")
+    if not path:
+        return ""
+    slug = path.split("/")[-1]
+    match = re.search(r"(\d{6,})(?:\D*)$", slug)
+    return match.group(1) if match else slug
+
+
+def split_linkedin_title(title: str) -> tuple[str, str]:
+    cleaned = compact(title)
+    if " hiring " in cleaned.lower():
+        before, after = split_case_insensitive(cleaned, " hiring ")
+        return compact(after) or cleaned, compact(before)
+    if " at " in cleaned.lower():
+        before, after = split_case_insensitive(cleaned, " at ")
+        return compact(before) or cleaned, compact(after)
+    if " - " in cleaned:
+        role, company = cleaned.rsplit(" - ", 1)
+        return compact(role) or cleaned, compact(company)
+    return cleaned, ""
+
+
+def split_case_insensitive(value: str, separator: str) -> tuple[str, str]:
+    index = value.lower().find(separator.lower())
+    if index < 0:
+        return value, ""
+    return value[:index], value[index + len(separator):]

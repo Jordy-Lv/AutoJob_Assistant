@@ -7,9 +7,10 @@ from fastapi.testclient import TestClient
 
 import api
 from autojob.models import JobOffer, SearchParams
-from autojob.search_engine import dedupe_jobs, run_job_search
+from autojob.search_engine import dedupe_jobs, parse_date, run_job_search
 from autojob.job_sources.base import JobSourceProvider, ProviderError
 from autojob.job_sources.remotive import RemotiveProvider
+from autojob.job_sources.serpapi import SerpAPILinkedInProvider, google_date_tbs, linkedin_queries
 
 
 class FakeProvider(JobSourceProvider):
@@ -71,6 +72,7 @@ class SearchEngineTests(unittest.TestCase):
             patch("autojob.search_engine.db.create_search_run", return_value=12),
             patch("autojob.search_engine.db.finish_search_run") as finish_run,
             patch("autojob.search_engine.db.find_duplicate_job_id", return_value=None),
+            patch("autojob.search_engine.db.find_discarded_job_id", return_value=None),
             patch("autojob.search_engine.db.upsert_job", return_value=(99, True)) as upsert_job,
         ):
             result = run_job_search(SearchParams(query="Java", limit=10), providers=providers)
@@ -97,12 +99,36 @@ class SearchEngineTests(unittest.TestCase):
             patch("autojob.search_engine.db.create_search_run", return_value=13),
             patch("autojob.search_engine.db.finish_search_run"),
             patch("autojob.search_engine.db.find_duplicate_job_id", return_value=None),
+            patch("autojob.search_engine.db.find_discarded_job_id", return_value=None),
             patch("autojob.search_engine.db.upsert_job", side_effect=[(1, True)]),
         ):
             result = run_job_search(SearchParams(query="Java", junior_only=True), providers=providers)
 
         self.assertEqual(result.total_found, 1)
         self.assertEqual(result.jobs[0].seniority, "junior")
+
+    def test_parse_date_accepts_serpapi_relative_dates(self) -> None:
+        self.assertIsNotNone(parse_date("3 days ago"))
+        self.assertIsNotNone(parse_date("Apr 21, 2026"))
+
+    def test_run_job_search_skips_discarded_jobs(self) -> None:
+        providers = [FakeProvider([job()])]
+
+        with (
+            patch("autojob.search_engine.db.create_search_run", return_value=14),
+            patch("autojob.search_engine.db.finish_search_run") as finish_run,
+            patch("autojob.search_engine.db.find_discarded_job_id", return_value=77),
+            patch("autojob.search_engine.db.upsert_job") as upsert_job,
+        ):
+            result = run_job_search(SearchParams(query="Java", limit=10), providers=providers)
+
+        self.assertEqual(result.jobs, [])
+        self.assertEqual(result.saved_ids, [])
+        self.assertEqual(result.discarded_ids, [77])
+        self.assertEqual(result.total_discarded, 1)
+        self.assertEqual(result.sources[0]["discarded"], 1)
+        upsert_job.assert_not_called()
+        finish_run.assert_called_once()
 
     def test_remotive_normalize_sets_internal_shape(self) -> None:
         raw = {
@@ -125,6 +151,33 @@ class SearchEngineTests(unittest.TestCase):
         self.assertTrue(normalized.remote)
         self.assertEqual(normalized.seniority, "junior")
         self.assertEqual(normalized.employment_type, "full_time")
+
+    def test_serpapi_linkedin_normalize_sets_linkedin_shape(self) -> None:
+        raw = {
+            "title": "BairesDev hiring Junior Java Developer - Remote Work",
+            "link": "https://www.linkedin.com/jobs/view/junior-java-developer-remote-work-at-bairesdev-4407197978",
+            "snippet": "Develop and maintain Java applications. This is a remote role.",
+        }
+
+        normalized = SerpAPILinkedInProvider().normalize(raw)
+
+        self.assertEqual(normalized.source, "LinkedIn via SerpAPI")
+        self.assertEqual(normalized.external_id, "4407197978")
+        self.assertEqual(normalized.title, "Junior Java Developer - Remote Work")
+        self.assertEqual(normalized.company, "BairesDev")
+        self.assertTrue(normalized.remote)
+
+    def test_serpapi_linkedin_queries_broaden_location_search(self) -> None:
+        queries = linkedin_queries(
+            SearchParams(query="Java Junior", location="Colombia", remote_only=True, date_filter="7d")
+        )
+
+        self.assertIn("site:linkedin.com/jobs/view Java Junior remote Colombia", queries)
+        self.assertIn("site:linkedin.com/jobs/view Java Junior developer remote Colombia", queries)
+        self.assertIn("site:linkedin.com/jobs/view Java Junior remote", queries)
+        self.assertEqual(google_date_tbs("24h"), "qdr:d")
+        self.assertEqual(google_date_tbs("7d"), "qdr:w")
+        self.assertEqual(google_date_tbs("30d"), "qdr:m")
 
     def test_search_jobs_endpoint_delegates_to_engine(self) -> None:
         fake_result = {
@@ -172,6 +225,7 @@ class SearchEngineTests(unittest.TestCase):
         self.assertIn("remoteok", source_ids)
         self.assertIn("adzuna", source_ids)
         self.assertIn("serpapi", source_ids)
+        self.assertIn("serpapi_linkedin", source_ids)
 
 
 if __name__ == "__main__":

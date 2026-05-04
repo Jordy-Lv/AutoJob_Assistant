@@ -8,7 +8,7 @@ from .arbeitnow import ArbeitnowProvider
 from .base import JobSourceProvider
 from .remoteok import RemoteOKProvider
 from .remotive import RemotiveProvider
-from .serpapi import SerpAPIProvider
+from .serpapi import SerpAPILinkedInProvider, SerpAPIProvider
 
 
 def all_providers() -> list[JobSourceProvider]:
@@ -18,6 +18,7 @@ def all_providers() -> list[JobSourceProvider]:
         RemoteOKProvider(),
         AdzunaProvider(),
         SerpAPIProvider(),
+        SerpAPILinkedInProvider(),
     ]
 
 
@@ -52,6 +53,7 @@ def select_providers(selected_sources: Iterable[str] | None = None) -> tuple[lis
                     "found": 0,
                     "saved": 0,
                     "duplicates": 0,
+                    "discarded": 0,
                     "error": "Unknown source",
                 }
             )
@@ -73,6 +75,7 @@ def source_summary(
     found: int = 0,
     saved: int = 0,
     duplicates: int = 0,
+    discarded: int = 0,
 ) -> dict:
     return {
         "id": provider.source_id,
@@ -81,5 +84,6 @@ def source_summary(
         "found": found,
         "saved": saved,
         "duplicates": duplicates,
+        "discarded": discarded,
         "error": error,
     }

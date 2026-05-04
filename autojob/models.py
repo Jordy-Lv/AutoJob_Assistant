@@ -7,6 +7,7 @@ from typing import Any
 
 STATUS_OPTIONS = (
     "Nueva",
+    "Vista",
     "Interesante",
     "Lista para aplicar",
     "Aplicada",

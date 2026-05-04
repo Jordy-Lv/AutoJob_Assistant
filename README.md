@@ -121,7 +121,7 @@ curl.exe http://127.0.0.1:8501/api/search/sources
 curl.exe http://127.0.0.1:8501/api/search/runs
 ```
 
-Fuentes integradas: Remotive, Arbeitnow y RemoteOK. Adzuna se activa con `ADZUNA_APP_ID` + `ADZUNA_APP_KEY`; SerpAPI se activa con `SERPAPI_KEY`.
+Fuentes integradas: Remotive, Arbeitnow y RemoteOK. Adzuna se activa con `ADZUNA_APP_ID` + `ADZUNA_APP_KEY`; SerpAPI se activa con `SERPAPI_KEY` para Google Jobs y para la fuente `LinkedIn via SerpAPI`.
 
 Para agregar nuevas fuentes, revisa `docs/search_providers.md`.
 

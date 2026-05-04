@@ -450,6 +450,11 @@ def upsert_job(job: JobOffer) -> tuple[int, bool]:
     with get_engine().begin() as conn:
         duplicate_id = _find_duplicate_job_id(conn, job.source, job.external_id, normalized_url, fingerprint)
         if duplicate_id is not None:
+            duplicate_status = conn.execute(
+                select(jobs_table.c.status).where(jobs_table.c.id == duplicate_id)
+            ).scalar_one_or_none()
+            if duplicate_status == "Descartada":
+                return duplicate_id, False
             conn.execute(
                 update(jobs_table)
                 .where(jobs_table.c.id == duplicate_id)
@@ -532,14 +537,30 @@ def find_duplicate_job_id(job: JobOffer) -> int | None:
         return _find_duplicate_job_id(conn, job.source, job.external_id, normalized_url, fingerprint)
 
 
+def find_discarded_job_id(job: JobOffer) -> int | None:
+    normalized_url = normalize_job_url(job.url)
+    fingerprint = job_identity_fingerprint(job.title, job.company, job.location)
+    with get_engine().connect() as conn:
+        duplicate_id = _find_duplicate_job_id(conn, job.source, job.external_id, normalized_url, fingerprint)
+        if duplicate_id is None:
+            return None
+        status = conn.execute(
+            select(jobs_table.c.status).where(jobs_table.c.id == duplicate_id)
+        ).scalar_one_or_none()
+    return duplicate_id if status == "Descartada" else None
+
+
 def list_jobs(
     status: str | None = None,
     search: str = "",
     min_score: float | None = None,
+    include_discarded: bool = False,
 ) -> list[JobOffer]:
     conditions = []
     if status and status != "Todos":
         conditions.append(jobs_table.c.status == status)
+    elif not include_discarded:
+        conditions.append(jobs_table.c.status != "Descartada")
     if search.strip():
         needle = f"%{search.strip()}%"
         conditions.append(

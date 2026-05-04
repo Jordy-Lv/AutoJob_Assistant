@@ -53,6 +53,10 @@ class StatusPayload(BaseModel):
     status: str
 
 
+class JobIdsPayload(BaseModel):
+    ids: list[int] = Field(default_factory=list)
+
+
 class AnalyzePayload(BaseModel):
     use_ai: bool = False
 

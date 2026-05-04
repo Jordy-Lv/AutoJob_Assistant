@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
+import re
 from typing import Any
 
 from . import db
@@ -18,6 +19,7 @@ class SearchEngineResult:
     jobs: list[JobOffer]
     saved_ids: list[int]
     duplicates: int
+    discarded_ids: list[int]
     sources: list[dict[str, Any]]
     new_job_ids: list[int]
     updated_job_ids: list[int]
@@ -37,6 +39,10 @@ class SearchEngineResult:
     @property
     def total_updated(self) -> int:
         return len(self.updated_job_ids)
+
+    @property
+    def total_discarded(self) -> int:
+        return len(self.discarded_ids)
 
     @property
     def errors(self) -> list[dict[str, Any]]:
@@ -68,6 +74,7 @@ def run_job_search(
     saved_ids: list[int] = []
     new_job_ids: list[int] = []
     updated_job_ids: list[int] = []
+    discarded_ids: list[int] = []
     duplicates = 0
 
     if not selected and not skipped_sources:
@@ -79,6 +86,7 @@ def run_job_search(
                 "found": 0,
                 "saved": 0,
                 "duplicates": 0,
+                "discarded": 0,
                 "error": "No hay fuentes habilitadas para esta busqueda",
             }
         )
@@ -106,6 +114,14 @@ def run_job_search(
                 summary["duplicates"] += 1
                 continue
             seen_keys.update(keys)
+
+            if save:
+                discarded_id = db.find_discarded_job_id(job)
+                if discarded_id is not None:
+                    discarded_ids.append(discarded_id)
+                    summary["discarded"] = int(summary.get("discarded") or 0) + 1
+                    continue
+
             response_jobs.append(job)
 
             if not save:
@@ -150,6 +166,7 @@ def run_job_search(
         jobs=limited_jobs,
         saved_ids=saved_ids,
         duplicates=duplicates,
+        discarded_ids=discarded_ids,
         sources=source_summaries,
         new_job_ids=new_job_ids,
         updated_job_ids=updated_job_ids,
@@ -299,15 +316,49 @@ def matches_date_filter(value: str, date_filter: str) -> bool:
 
 
 def parse_date(value: str) -> datetime | None:
-    if not value:
+    text = (value or "").strip()
+    if not text:
         return None
+    lowered = text.lower()
+    relative = re.search(r"(\d+)\s+(minute|minutes|hour|hours|day|days|week|weeks|month|months)\s+ago", lowered)
+    if relative:
+        amount = int(relative.group(1))
+        unit = relative.group(2)
+        if unit.startswith("minute"):
+            return datetime.now(timezone.utc) - timedelta(minutes=amount)
+        if unit.startswith("hour"):
+            return datetime.now(timezone.utc) - timedelta(hours=amount)
+        if unit.startswith("day"):
+            return datetime.now(timezone.utc) - timedelta(days=amount)
+        if unit.startswith("week"):
+            return datetime.now(timezone.utc) - timedelta(weeks=amount)
+        if unit.startswith("month"):
+            return datetime.now(timezone.utc) - timedelta(days=amount * 30)
+    if lowered in {"today", "just now"}:
+        return datetime.now(timezone.utc)
+    if lowered == "yesterday":
+        return datetime.now(timezone.utc) - timedelta(days=1)
     try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError:
-        return None
+        parsed = parse_named_date(text)
+        if parsed is None:
+            return None
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def parse_named_date(value: str) -> datetime | None:
+    for fmt in ("%b %d, %Y", "%B %d, %Y", "%b %d", "%B %d"):
+        try:
+            parsed = datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+        if "%Y" not in fmt:
+            parsed = parsed.replace(year=datetime.now(timezone.utc).year)
+        return parsed.replace(tzinfo=timezone.utc)
+    return None
 
 
 def analyze_saved_job(job_id: int) -> None:
@@ -349,11 +400,13 @@ def search_result_dict(result: SearchEngineResult) -> dict[str, Any]:
         "total_found": result.total_found,
         "total_saved": result.total_saved,
         "duplicates": result.duplicates,
+        "discarded": result.total_discarded,
         "saved": result.total_saved,
         "errors": result.errors,
         "sources": result.sources,
         "jobs": [asdict(job) for job in result.jobs],
         "saved_ids": result.saved_ids,
+        "discarded_ids": result.discarded_ids,
         "new_job_ids": result.new_job_ids,
         "updated_job_ids": result.updated_job_ids,
         "total_new": result.total_new,

@@ -48,11 +48,12 @@ const THEME_KEY = "autojob-theme";
 // Estados aceptados por el backend (post simplificación). NO incluyen estados
 // del bot eliminado (En aplicacion, Captcha requerido, Necesita revision, Error).
 // ----------------------------------------------------------------------------
-const STATUSES = ["Nueva", "Interesante", "Lista para aplicar", "Aplicada", "Descartada"];
+const STATUSES = ["Nueva", "Vista", "Interesante", "Lista para aplicar", "Aplicada", "Descartada"];
 
 // Mapeo solo para mostrar (legacy gracefully degradation).
 const STATUS_LABELS = {
   Nueva: "Nueva",
+  Vista: "Vista",
   Interesante: "Interesante",
   "Lista para aplicar": "Lista para aplicar",
   Aplicada: "Aplicada manualmente",
@@ -89,9 +90,17 @@ const FLOW_STEPS = [
 const JOB_FILTERS = [
   { key: "all", label: "Todas" },
   { key: "new", label: "Nuevas" },
+  { key: "viewed", label: "Vistas" },
   { key: "good", label: "Buen match" },
   { key: "docs", label: "Con documentos" },
   { key: "applied", label: "Aplicadas" },
+];
+
+const DATE_FILTER_OPTIONS = [
+  { value: "24h", label: "Ultimas 24 h" },
+  { value: "7d", label: "Ultimos 7 dias" },
+  { value: "30d", label: "Ultimos 30 dias" },
+  { value: "", label: "Cualquier fecha" },
 ];
 
 function getInitialTheme() {
@@ -110,7 +119,7 @@ function App() {
   const [documents, setDocuments] = useState([]);
   const [profile, setProfile] = useState(null);
   const [selectedJobId, setSelectedJobId] = useState(null);
-  const [filters, setFilters] = useState({ category: "all", search: "", minScore: 0 });
+  const [filters, setFilters] = useState({ category: "new", search: "", minScore: 0 });
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(true);
   const [theme, setTheme] = useState(getInitialTheme);
@@ -139,6 +148,13 @@ function App() {
   useEffect(() => {
     loadAll();
   }, []);
+
+  useEffect(() => {
+    if (view !== "jobs") return;
+    setFilters((current) => (
+      current.category === "new" ? current : { ...current, category: "new" }
+    ));
+  }, [view]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -215,6 +231,56 @@ function App() {
     try {
       await request(`/api/jobs/${job.id}/apply`, { method: "POST" });
       showToast("Marcada como aplicada manualmente");
+      await loadAll({ silent: true });
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  }
+
+  async function markAsViewed(job) {
+    if (!job?.id || job.status !== "Nueva") return;
+    try {
+      await request(`/api/jobs/${job.id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "Vista" }),
+      });
+      await loadAll({ silent: true });
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  }
+
+  async function discardJob(job) {
+    try {
+      const updated = await request(`/api/jobs/${job.id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "Descartada" }),
+      });
+      setSelectedJobId(updated.id);
+      showToast("Oferta descartada y ocultada");
+      await loadAll({ silent: true });
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  }
+
+  async function discardJobs(jobIds) {
+    if (!jobIds.length) return;
+    try {
+      const results = await Promise.allSettled(
+        jobIds.map((id) => request(`/api/jobs/${id}/status`, {
+          method: "PATCH",
+          body: JSON.stringify({ status: "Descartada" }),
+        })),
+      );
+      const discardedCount = results.filter((result) => result.status === "fulfilled").length;
+      const failedCount = results.length - discardedCount;
+      showToast(
+        failedCount
+          ? `${discardedCount} ofertas descartadas, ${failedCount} no se pudieron descartar`
+          : `${discardedCount} ofertas descartadas`,
+        failedCount ? "error" : "success",
+      );
       await loadAll({ silent: true });
     } catch (error) {
       showToast(error.message, "error");
@@ -304,6 +370,9 @@ function App() {
                 onGenerate={generateDocuments}
                 onStatus={updateStatus}
                 onMarkApplied={markAsApplied}
+                onOpenOriginal={markAsViewed}
+                onDiscard={discardJob}
+                onDiscardBulk={discardJobs}
               />
             )}
             {view === "saved" && <SavedSearchesView showToast={showToast} reload={() => loadAll({ silent: true })} />}
@@ -557,14 +626,18 @@ function JobsView({
   onGenerate,
   onStatus,
   onMarkApplied,
+  onOpenOriginal,
+  onDiscard,
+  onDiscardBulk,
   profile,
 }) {
   const counts = useMemo(() => buildFilterCounts(jobs, documentJobIds), [jobs, documentJobIds]);
   const selectedDocuments = selectedJob ? documents.filter((doc) => doc.job_id === selectedJob.id) : [];
   const profileProgress = profileCompletion(profile);
+  const discardableVisibleJobs = visibleJobs.filter((job) => !["Aplicada", "Descartada"].includes(job.status));
 
   function clearFilters() {
-    setFilters({ category: "all", search: "", minScore: 0 });
+    setFilters({ category: "new", search: "", minScore: 0 });
   }
 
   return (
@@ -610,6 +683,15 @@ function JobsView({
               <Filter size={15} />
               Limpiar
             </button>
+            <button
+              className="button ghost compact danger"
+              onClick={() => onDiscardBulk(discardableVisibleJobs.map((job) => job.id))}
+              disabled={!discardableVisibleJobs.length}
+              type="button"
+            >
+              <Trash2 size={15} />
+              Descartar visibles ({discardableVisibleJobs.length})
+            </button>
           </div>
         </div>
 
@@ -625,6 +707,8 @@ function JobsView({
               onGenerate={() => onGenerate(selectedJob)}
               onStatus={(status) => onStatus(selectedJob, status)}
               onMarkApplied={() => onMarkApplied(selectedJob)}
+              onOpenOriginal={() => onOpenOriginal(selectedJob)}
+              onDiscard={() => onDiscard(selectedJob)}
             />
           ) : (
             <EmptyState
@@ -672,6 +756,8 @@ function JobsView({
             onGenerate={() => onGenerate(selectedJob)}
             onStatus={(status) => onStatus(selectedJob, status)}
             onMarkApplied={() => onMarkApplied(selectedJob)}
+            onOpenOriginal={() => onOpenOriginal(selectedJob)}
+            onDiscard={() => onDiscard(selectedJob)}
           />
         ) : (
           <EmptyState
@@ -735,8 +821,11 @@ function JobDetail({
   onGenerate,
   onStatus,
   onMarkApplied,
+  onOpenOriginal,
+  onDiscard,
 }) {
   const isAlreadyApplied = job.status === "Aplicada";
+  const isDiscarded = job.status === "Descartada";
   const scoreText = scoreSummary(job.score);
   const profileIncomplete = profileProgress < 70;
   const lowScore = job.score != null && Number(job.score) < 60;
@@ -783,7 +872,13 @@ function JobDetail({
           {hasDocuments ? "Regenerar CV/carta" : "Generar CV/carta"}
         </button>
         {job.url ? (
-          <a className={openOriginalIsPrimary ? "button primary" : "button secondary"} href={job.url} target="_blank" rel="noreferrer">
+          <a
+            className={openOriginalIsPrimary ? "button primary" : "button secondary"}
+            href={job.url}
+            target="_blank"
+            rel="noreferrer"
+            onClick={onOpenOriginal}
+          >
             <ExternalLink size={16} />
             Abrir oferta original
           </a>
@@ -797,6 +892,12 @@ function JobDetail({
           <button className="button secondary" onClick={onMarkApplied} type="button">
             <CheckCircle2 size={16} />
             Marcar como aplicada
+          </button>
+        )}
+        {!isAlreadyApplied && !isDiscarded && (
+          <button className="button ghost danger" onClick={onDiscard} type="button">
+            <Trash2 size={16} />
+            Descartar
           </button>
         )}
         {job.score != null && (
@@ -969,7 +1070,7 @@ function SavedSearchesView({ showToast, reload }) {
     try {
       const result = await request(`/api/saved-searches/${id}/run`, { method: "POST" });
       const sr = result.search_result || {};
-      showToast(`Ejecutada: ${sr.total_new || 0} nuevas, ${sr.total_updated || 0} actualizadas, ${sr.duplicates || 0} duplicadas`);
+      showToast(`Ejecutada: ${sr.total_new || 0} nuevas, ${sr.total_updated || 0} actualizadas, ${sr.duplicates || 0} duplicadas, ${sr.discarded || 0} ocultas`);
       await load();
       await reload();
     } catch (error) {
@@ -1203,6 +1304,7 @@ function SearchView({ reload, showToast, setView }) {
 function AutoSearchPanel({ sources, reload, showToast, setView }) {
   const [keywords, setKeywords] = useState("");
   const [location, setLocation] = useState("Remote");
+  const [dateFilter, setDateFilter] = useState("30d");
   const [remoteOnly, setRemoteOnly] = useState(true);
   const [autoAnalyze, setAutoAnalyze] = useState(true);
   const [selectedSourceIds, setSelectedSourceIds] = useState([]);
@@ -1241,6 +1343,7 @@ function AutoSearchPanel({ sources, reload, showToast, setView }) {
           internship_allowed: true,
           limit: 50,
           selected_sources: selectedSourceIds,
+          date_filter: dateFilter,
           auto_analyze: autoAnalyze,
           save_results: true,
         }),
@@ -1248,10 +1351,11 @@ function AutoSearchPanel({ sources, reload, showToast, setView }) {
       setSummary(result);
       const newCount = result.total_new ?? 0;
       const updatedCount = result.total_updated ?? 0;
+      const discardedCount = result.discarded || 0;
       showToast(
         newCount > 0
-          ? `${newCount} ofertas nuevas guardadas, ${updatedCount} actualizadas`
-          : `Sin nuevas. ${updatedCount} actualizadas, ${result.duplicates || 0} duplicadas.`,
+          ? `${newCount} ofertas nuevas guardadas, ${updatedCount} actualizadas, ${discardedCount} ocultas`
+          : `Sin nuevas. ${updatedCount} actualizadas, ${result.duplicates || 0} duplicadas, ${discardedCount} ocultas.`,
       );
       await reload();
     } catch (error) {
@@ -1266,6 +1370,14 @@ function AutoSearchPanel({ sources, reload, showToast, setView }) {
       <div className="form-grid">
         <Field label="Rol o palabra clave" value={keywords} onChange={setKeywords} placeholder="java junior, react developer..." />
         <Field label="Ubicación" value={location} onChange={setLocation} placeholder="Remote, Colombia, Berlin..." />
+        <label className="field">
+          <span>Antiguedad</span>
+          <select value={dateFilter} onChange={(e) => setDateFilter(e.target.value)}>
+            {DATE_FILTER_OPTIONS.map((option) => (
+              <option key={option.value || "any"} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </label>
         <div className="field-wide field-checkboxes">
           <label className="toggle-field">
             <input type="checkbox" checked={remoteOnly} onChange={(e) => setRemoteOnly(e.target.checked)} />
@@ -1321,11 +1433,11 @@ function AutoSearchPanel({ sources, reload, showToast, setView }) {
       {summary && (
         <div className="source-summary">
           <strong>
-            {summary.total_found} encontradas · {summary.total_new ?? 0} nuevas · {summary.total_updated ?? 0} actualizadas · {summary.duplicates} duplicadas
+            {summary.total_found} encontradas · {summary.total_new ?? 0} nuevas · {summary.total_updated ?? 0} actualizadas · {summary.duplicates} duplicadas · {summary.discarded || 0} ocultas
           </strong>
           {summary.sources?.map((s) => (
             <span key={s.id} className={s.status === "ok" ? "ok" : "warn"}>
-              {s.name}: {s.found} encontradas, {s.saved} guardadas
+              {s.name}: {s.found} encontradas, {s.saved} guardadas, {s.discarded || 0} ocultas
               {s.error ? ` · ${s.error}` : ""}
             </span>
           ))}
@@ -1970,7 +2082,7 @@ function emptySavedSearchForm() {
     junior_only: false,
     internship_allowed: false,
     selected_sources: [],
-    date_filter: "",
+    date_filter: "30d",
     score_threshold: 70,
     interval_minutes: 360,
     enabled: true,
@@ -2066,11 +2178,13 @@ function buildPrimaryRecommendation({ nextStep, totalJobs, unanalyzedCount, high
 }
 
 function buildFilterCounts(jobs, documentJobIds) {
+  const activeJobs = jobs.filter((j) => j.status !== "Descartada");
   return {
-    all: jobs.length,
-    new: jobs.filter((j) => j.is_new).length,
-    good: jobs.filter((j) => (j.score || 0) >= 60 && !["Aplicada", "Descartada"].includes(j.status)).length,
-    docs: jobs.filter((j) => documentJobIds.has(j.id)).length,
+    all: activeJobs.length,
+    new: activeJobs.filter((j) => j.status === "Nueva").length,
+    viewed: activeJobs.filter((j) => j.status === "Vista").length,
+    good: activeJobs.filter((j) => (j.score || 0) >= 60 && j.status !== "Aplicada").length,
+    docs: activeJobs.filter((j) => documentJobIds.has(j.id)).length,
     applied: jobs.filter((j) => j.status === "Aplicada").length,
   };
 }
@@ -2078,6 +2192,10 @@ function buildFilterCounts(jobs, documentJobIds) {
 function filterJobs(jobs, filters, documentJobIds) {
   const query = filters.search.trim().toLowerCase();
   return jobs.filter((job) => {
+    if (job.status === "Descartada") {
+      return false;
+    }
+
     const haystack = [
       job.title,
       job.company,
@@ -2092,7 +2210,8 @@ function filterJobs(jobs, filters, documentJobIds) {
     const cat = filters.category;
     const matchesCategory =
       cat === "all" ||
-      (cat === "new" && job.is_new) ||
+      (cat === "new" && job.status === "Nueva") ||
+      (cat === "viewed" && job.status === "Vista") ||
       (cat === "good" && (job.score || 0) >= 60 && !["Aplicada", "Descartada"].includes(job.status)) ||
       (cat === "docs" && documentJobIds.has(job.id)) ||
       (cat === "applied" && job.status === "Aplicada");
@@ -2151,6 +2270,7 @@ function statusClass(status = "") {
   if (["Aplicada"].includes(status)) return "success";
   if (["Lista para aplicar", "Aprobada"].includes(status)) return "active";
   if (["Interesante"].includes(status)) return "active";
+  if (["Vista"].includes(status)) return "warning";
   if (["Descartada", "Error"].includes(status)) return "danger";
   if (["Captcha requerido", "Necesita revision"].includes(status)) return "warning";
   return "neutral";

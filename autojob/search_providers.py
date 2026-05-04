@@ -19,7 +19,7 @@ from autojob.job_sources.base import (
 from autojob.job_sources.registry import all_providers as default_providers
 from autojob.job_sources.remoteok import RemoteOKProvider
 from autojob.job_sources.remotive import RemotiveProvider
-from autojob.job_sources.serpapi import SerpAPIProvider
+from autojob.job_sources.serpapi import SerpAPILinkedInProvider, SerpAPIProvider
 
 __all__ = [
     "AdzunaProvider",
@@ -29,6 +29,7 @@ __all__ = [
     "ProviderHealth",
     "RemoteOKProvider",
     "RemotiveProvider",
+    "SerpAPILinkedInProvider",
     "SerpAPIProvider",
     "default_providers",
     "infer_seniority",

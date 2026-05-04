@@ -19,6 +19,7 @@ from autojob.job_sources import (
 from autojob.models import STATUS_OPTIONS, JobOffer, utc_now_iso
 from autojob.schemas import (
     AnalyzePayload,
+    JobIdsPayload,
     ManualJobPayload,
     StatusPayload,
     TextImportPayload,
@@ -33,11 +34,17 @@ INVALID_JOB_URL_MESSAGE = "No se pudo detectar una oferta laboral valida en esta
 
 
 @router.get("")
-def list_jobs(status: str = "Todos", search: str = "", min_score: float = 0) -> dict[str, Any]:
+def list_jobs(
+    status: str = "Todos",
+    search: str = "",
+    min_score: float = 0,
+    include_discarded: bool = False,
+) -> dict[str, Any]:
     jobs = db.list_jobs(
         status=status,
         search=search,
         min_score=float(min_score) if min_score > 0 else None,
+        include_discarded=include_discarded,
     )
     return {"jobs": [job_dict(job) for job in jobs], "statuses": STATUS_OPTIONS}
 
@@ -119,11 +126,46 @@ def update_status(job_id: int, payload: StatusPayload) -> dict[str, Any]:
     return job_dict(job)
 
 
+@router.post("/{job_id}/discard")
+def discard_job(job_id: int) -> dict[str, Any]:
+    job = db.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Oferta no encontrada")
+    db.update_job_status(job_id, "Descartada")
+    discarded = db.get_job(job_id) or job
+    return {
+        "job": job_dict(discarded),
+        "message": "Oferta descartada. No volvera a aparecer en nuevas busquedas.",
+    }
+
+
+@router.post("/discard-bulk")
+def discard_jobs(payload: JobIdsPayload) -> dict[str, Any]:
+    unique_ids = sorted({int(job_id) for job_id in payload.ids if int(job_id) > 0})
+    discarded: list[int] = []
+    skipped: list[int] = []
+    for job_id in unique_ids:
+        job = db.get_job(job_id)
+        if job is None or job.status in {"Aplicada", "Descartada"}:
+            skipped.append(job_id)
+            continue
+        db.update_job_status(job_id, "Descartada")
+        discarded.append(job_id)
+    return {
+        "discarded": discarded,
+        "discarded_count": len(discarded),
+        "skipped": skipped,
+        "message": f"{len(discarded)} ofertas descartadas.",
+    }
+
+
 @router.post("/{job_id}/analyze")
 def analyze(job_id: int, payload: AnalyzePayload) -> dict[str, Any]:
     job = db.get_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Oferta no encontrada")
+    if job.status == "Descartada":
+        raise HTTPException(status_code=400, detail="Esta oferta esta descartada.")
     profile = db.get_profile()
     result = analyze_job_with_optional_ai(profile, job, payload.use_ai)
     db.update_job_analysis(job_id, result.score, result.reasons, result.gaps, result.matched_skills)
@@ -136,6 +178,8 @@ def documents(job_id: int) -> dict[str, Any]:
     job = db.get_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Oferta no encontrada")
+    if job.status == "Descartada":
+        raise HTTPException(status_code=400, detail="Esta oferta esta descartada.")
     profile = db.get_profile()
     analysis = analyze_job(profile, job) if job.score is None else None
     if analysis is not None:
@@ -152,6 +196,8 @@ def mark_as_applied(job_id: int) -> dict[str, Any]:
     job = db.get_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Oferta no encontrada")
+    if job.status == "Descartada":
+        raise HTTPException(status_code=400, detail="Esta oferta esta descartada.")
     db.update_job_status(job_id, "Aplicada")
     documents_used = [
         document.get("path", "")
