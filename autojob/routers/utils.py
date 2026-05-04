@@ -115,6 +115,23 @@ def documents_for_job(job_id: int) -> list[dict[str, Any]]:
     return [document_dict(document) for document in db.list_documents(job_id)]
 
 
+def analysis_from_job(job: JobOffer):
+    from autojob.analyzer import analyze_job
+    from autojob.models import AnalysisResult
+
+    if job.score is None:
+        return analyze_job(db.get_profile(), job)
+    if job.score >= 80:
+        recommendation = "Alta prioridad: preparar aplicacion personalizada."
+    elif job.score >= 60:
+        recommendation = "Buena opcion: revisar brechas antes de aplicar."
+    elif job.score >= 40:
+        recommendation = "Posible opcion: requiere ajuste del CV o mas informacion."
+    else:
+        recommendation = "Baja prioridad: revisar solo si la empresa o el rol interesan mucho."
+    return AnalysisResult(job.score, job.reasons, job.gaps, job.matched_skills, recommendation)
+
+
 def all_documents(jobs: list[JobOffer]) -> list[dict[str, Any]]:
     documents: list[dict[str, Any]] = []
     for job in jobs:

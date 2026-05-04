@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from autojob import db
 from autojob.ai import analyze_job_with_optional_ai
 from autojob.analyzer import analyze_job
-from autojob.documents import generate_document_package
+from autojob.documents import DOCUMENT_TYPES
 from autojob.job_sources import (
     InvalidJobPostingError,
     JobSourceUnavailableError,
@@ -16,7 +16,7 @@ from autojob.job_sources import (
     build_manual_job,
     fetch_job_from_url,
 )
-from autojob.models import STATUS_OPTIONS, JobOffer, utc_now_iso
+from autojob.models import STATUS_OPTIONS, utc_now_iso
 from autojob.schemas import (
     AnalyzePayload,
     JobIdsPayload,
@@ -180,14 +180,13 @@ def documents(job_id: int) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="Oferta no encontrada")
     if job.status == "Descartada":
         raise HTTPException(status_code=400, detail="Esta oferta esta descartada.")
-    profile = db.get_profile()
-    analysis = analyze_job(profile, job) if job.score is None else None
-    if analysis is not None:
+    if job.score is None:
+        profile = db.get_profile()
+        analysis = analyze_job(profile, job)
         db.update_job_analysis(job_id, analysis.score, analysis.reasons, analysis.gaps, analysis.matched_skills)
-    job = db.get_job(job_id) or job
-    generated = generate_document_package(profile, job, analyze_job(profile, job) if job.score is None else _analysis_from_job(job))
-    for document in generated:
-        db.add_document(job_id, document.doc_type, document.path)
+    db.delete_documents_for_job(job_id)
+    for doc_type in DOCUMENT_TYPES:
+        db.add_document(job_id, doc_type, "")
     return {"documents": documents_for_job(job_id)}
 
 
@@ -225,17 +224,3 @@ def mark_as_applied(job_id: int) -> dict[str, Any]:
     }
 
 
-def _analysis_from_job(job: JobOffer):
-    from autojob.models import AnalysisResult
-
-    if job.score is None:
-        return analyze_job(db.get_profile(), job)
-    if job.score >= 80:
-        recommendation = "Alta prioridad: preparar aplicacion personalizada."
-    elif job.score >= 60:
-        recommendation = "Buena opcion: revisar brechas antes de aplicar."
-    elif job.score >= 40:
-        recommendation = "Posible opcion: requiere ajuste del CV o mas informacion."
-    else:
-        recommendation = "Baja prioridad: revisar solo si la empresa o el rol interesan mucho."
-    return AnalysisResult(job.score, job.reasons, job.gaps, job.matched_skills, recommendation)

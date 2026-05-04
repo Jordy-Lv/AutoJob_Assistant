@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 import html
+import io
 import unicodedata
-from pathlib import Path
 
-from .config import OUTPUT_DIR, ensure_directories
-from .models import AnalysisResult, GeneratedDocument, JobOffer, UserProfile
+from .models import AnalysisResult, JobOffer, UserProfile
+
+DOCUMENT_FILENAMES: dict[str, tuple[str, str]] = {
+    "CV DOCX": ("cv.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    "CV PDF": ("cv.pdf", "application/pdf"),
+    "Carta DOCX": ("carta.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    "Carta PDF": ("carta.pdf", "application/pdf"),
+}
+
+DOCUMENT_TYPES = list(DOCUMENT_FILENAMES.keys())
 
 
 def slugify(value: str, fallback: str = "documento") -> str:
@@ -61,22 +69,28 @@ def _add_bullets_docx(document, title: str, items: list[str]) -> None:
         document.add_paragraph(item, style="List Bullet")
 
 
-def _cv_path(job: JobOffer, suffix: str) -> Path:
-    base = slugify(f"{job.company}-{job.title}-cv", fallback="cv")
-    return OUTPUT_DIR / f"{base}.{suffix}"
-
-
-def _letter_path(job: JobOffer, suffix: str) -> Path:
-    base = slugify(f"{job.company}-{job.title}-carta", fallback="carta")
-    return OUTPUT_DIR / f"{base}.{suffix}"
+def _pdf_bullets(title: str, items: list[str], kit, story, styles) -> None:
+    if not items:
+        return
+    Paragraph = kit["Paragraph"]
+    Spacer = kit["Spacer"]
+    ListFlowable = kit["ListFlowable"]
+    ListItem = kit["ListItem"]
+    story.append(Paragraph(html.escape(title), styles["Heading2"]))
+    story.append(
+        ListFlowable(
+            [ListItem(Paragraph(html.escape(item), styles["BodyText"])) for item in items],
+            bulletType="bullet",
+        )
+    )
+    story.append(Spacer(1, 8))
 
 
 def generate_cv_docx(
     profile: UserProfile,
     job: JobOffer,
     analysis: AnalysisResult,
-) -> GeneratedDocument:
-    ensure_directories()
+) -> io.BytesIO:
     Document = _require_docx()
     document = Document()
     document.add_heading(profile.full_name or "Candidato", level=0)
@@ -102,23 +116,19 @@ def generate_cv_docx(
     _add_bullets_docx(document, "Educacion", _non_empty_lines(profile.education))
 
     if analysis.gaps:
-        _add_bullets_docx(
-            document,
-            "Temas a reforzar antes de entrevista",
-            analysis.gaps,
-        )
+        _add_bullets_docx(document, "Temas a reforzar antes de entrevista", analysis.gaps)
 
-    path = _cv_path(job, "docx")
-    document.save(path)
-    return GeneratedDocument("CV DOCX", str(path))
+    buffer = io.BytesIO()
+    document.save(buffer)
+    buffer.seek(0)
+    return buffer
 
 
 def generate_letter_docx(
     profile: UserProfile,
     job: JobOffer,
     analysis: AnalysisResult,
-) -> GeneratedDocument:
-    ensure_directories()
+) -> io.BytesIO:
     Document = _require_docx()
     document = Document()
     document.add_heading("Carta de presentacion", level=0)
@@ -129,9 +139,7 @@ def generate_letter_docx(
     name = profile.full_name or "Candidato"
     intro_role = profile.target_role or "desarrollador de software"
     company = job.company or "su equipo"
-    document.add_paragraph(
-        f"Hola {company},"
-    )
+    document.add_paragraph(f"Hola {company},")
     document.add_paragraph(
         f"Me interesa postularme al rol de {job.title}. Soy {intro_role} y "
         "me motiva construir soluciones practicas, mantenibles y orientadas a resultados."
@@ -151,50 +159,23 @@ def generate_letter_docx(
     )
     document.add_paragraph(f"Saludos,\n{name}")
 
-    path = _letter_path(job, "docx")
-    document.save(path)
-    return GeneratedDocument("Carta DOCX", str(path))
-
-
-def _paragraph(text: str, styles, name: str = "BodyText"):
-    Paragraph = _require_reportlab()["Paragraph"]
-    return Paragraph(html.escape(text), styles[name])
-
-
-def _pdf_bullets(title: str, items: list[str], kit, story, styles) -> None:
-    if not items:
-        return
-    Paragraph = kit["Paragraph"]
-    Spacer = kit["Spacer"]
-    ListFlowable = kit["ListFlowable"]
-    ListItem = kit["ListItem"]
-    story.append(Paragraph(html.escape(title), styles["Heading2"]))
-    story.append(
-        ListFlowable(
-            [
-                ListItem(Paragraph(html.escape(item), styles["BodyText"]))
-                for item in items
-            ],
-            bulletType="bullet",
-        )
-    )
-    story.append(Spacer(1, 8))
+    buffer = io.BytesIO()
+    document.save(buffer)
+    buffer.seek(0)
+    return buffer
 
 
 def generate_cv_pdf(
     profile: UserProfile,
     job: JobOffer,
     analysis: AnalysisResult,
-) -> GeneratedDocument:
-    ensure_directories()
+) -> io.BytesIO:
     kit = _require_reportlab()
     styles = kit["styles"]()
     Paragraph = kit["Paragraph"]
     Spacer = kit["Spacer"]
     SimpleDocTemplate = kit["SimpleDocTemplate"]
 
-    path = _cv_path(job, "pdf")
-    doc = SimpleDocTemplate(str(path), pagesize=kit["letter"])
     story = [
         Paragraph(html.escape(profile.full_name or "Candidato"), styles["Title"]),
         Paragraph(html.escape(profile.links), styles["BodyText"]),
@@ -221,23 +202,25 @@ def generate_cv_pdf(
     _pdf_bullets("Proyectos", _non_empty_lines(profile.projects), kit, story, styles)
     _pdf_bullets("Educacion", _non_empty_lines(profile.education), kit, story, styles)
     _pdf_bullets("Temas a reforzar antes de entrevista", analysis.gaps, kit, story, styles)
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=kit["letter"])
     doc.build(story)
-    return GeneratedDocument("CV PDF", str(path))
+    buffer.seek(0)
+    return buffer
 
 
 def generate_letter_pdf(
     profile: UserProfile,
     job: JobOffer,
     analysis: AnalysisResult,
-) -> GeneratedDocument:
-    ensure_directories()
+) -> io.BytesIO:
     kit = _require_reportlab()
     styles = kit["styles"]()
     Paragraph = kit["Paragraph"]
     Spacer = kit["Spacer"]
     SimpleDocTemplate = kit["SimpleDocTemplate"]
 
-    path = _letter_path(job, "pdf")
     name = profile.full_name or "Candidato"
     intro_role = profile.target_role or "desarrollador de software"
     company = job.company or "su equipo"
@@ -268,33 +251,21 @@ def generate_letter_pdf(
         )
     if profile.summary:
         story.append(Paragraph(html.escape(profile.summary), styles["BodyText"]))
-    story.extend(
-        [
-            Paragraph(
-                html.escape(
-                    "Me gustaria conversar sobre como puedo aportar al equipo y al producto. "
-                    "Quedo atento a la posibilidad de una entrevista."
-                ),
-                styles["BodyText"],
+    story.extend([
+        Paragraph(
+            html.escape(
+                "Me gustaria conversar sobre como puedo aportar al equipo y al producto. "
+                "Quedo atento a la posibilidad de una entrevista."
             ),
-            Spacer(1, 12),
-            Paragraph(html.escape("Saludos,"), styles["BodyText"]),
-            Paragraph(html.escape(name), styles["BodyText"]),
-        ]
-    )
-    doc = SimpleDocTemplate(str(path), pagesize=kit["letter"])
+            styles["BodyText"],
+        ),
+        Spacer(1, 12),
+        Paragraph(html.escape("Saludos,"), styles["BodyText"]),
+        Paragraph(html.escape(name), styles["BodyText"]),
+    ])
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=kit["letter"])
     doc.build(story)
-    return GeneratedDocument("Carta PDF", str(path))
-
-
-def generate_document_package(
-    profile: UserProfile,
-    job: JobOffer,
-    analysis: AnalysisResult,
-) -> list[GeneratedDocument]:
-    return [
-        generate_cv_docx(profile, job, analysis),
-        generate_cv_pdf(profile, job, analysis),
-        generate_letter_docx(profile, job, analysis),
-        generate_letter_pdf(profile, job, analysis),
-    ]
+    buffer.seek(0)
+    return buffer

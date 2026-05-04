@@ -625,6 +625,11 @@ def update_job_analysis(
         )
 
 
+def delete_documents_for_job(job_id: int) -> None:
+    with get_engine().begin() as conn:
+        conn.execute(documents_table.delete().where(documents_table.c.job_id == job_id))
+
+
 def add_document(job_id: int, doc_type: str, path: str, metadata_: dict[str, Any] | None = None) -> None:
     with get_engine().begin() as conn:
         conn.execute(
