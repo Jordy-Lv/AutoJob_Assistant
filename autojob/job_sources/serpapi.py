@@ -310,6 +310,26 @@ def linkedin_apply_status_verification_enabled() -> bool:
 def linkedin_job_is_closed_for_applications(url: str) -> bool:
     if not is_linkedin_job_url(url):
         return False
+    for status_url in linkedin_status_urls(url):
+        html_text = fetch_linkedin_status_html(status_url)
+        if not html_text:
+            continue
+        if has_closed_linkedin_application_signal(html_text):
+            return True
+        if linkedin_apply_cta_is_empty(html_text):
+            return True
+    return False
+
+
+def linkedin_status_urls(url: str) -> list[str]:
+    job_id = linkedin_external_id(url)
+    urls = [url]
+    if job_id:
+        urls.append(f"https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}")
+    return dedupe_text(urls)
+
+
+def fetch_linkedin_status_html(url: str) -> str:
     try:
         response = requests.get(
             url,
@@ -321,12 +341,10 @@ def linkedin_job_is_closed_for_applications(url: str) -> bool:
             timeout=linkedin_apply_status_timeout(),
         )
     except requests.RequestException:
-        return False
+        return ""
     if response.status_code >= 400:
-        return False
-    if has_closed_linkedin_application_signal(response.text):
-        return True
-    return False
+        return ""
+    return response.text or ""
 
 
 def linkedin_apply_status_timeout() -> float:
@@ -341,6 +359,33 @@ def has_closed_linkedin_application_signal(value: Any) -> bool:
     if not sample:
         return False
     return any(normalize_status_text(phrase) in sample for phrase in LINKEDIN_CLOSED_APPLICATION_PHRASES)
+
+
+def linkedin_apply_cta_is_empty(html_text: str) -> bool:
+    match = re.search(
+        r'<[^>]*class="[^"]*\btop-card-layout__cta-container\b[^"]*"[^>]*>(.*?)</div>',
+        html_text or "",
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if not match:
+        return False
+    cta_html = match.group(1)
+    return not linkedin_apply_cta_has_apply_action(cta_html)
+
+
+def linkedin_apply_cta_has_apply_action(html_text: str) -> bool:
+    sample = normalize_status_text(html_text)
+    return any(
+        marker in sample
+        for marker in (
+            "apply-button",
+            "public_jobs_apply-link",
+            "solicitar",
+            "postular",
+            "apply now",
+            "easy apply",
+        )
+    )
 
 
 LINKEDIN_CLOSED_APPLICATION_PHRASES = (

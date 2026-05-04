@@ -14,6 +14,7 @@ from autojob.job_sources.serpapi import (
     SerpAPILinkedInProvider,
     google_date_tbs,
     has_closed_linkedin_application_signal,
+    linkedin_apply_cta_is_empty,
     linkedin_queries,
 )
 
@@ -195,6 +196,17 @@ class SearchEngineTests(unittest.TestCase):
         self.assertTrue(has_closed_linkedin_application_signal("Ya no se aceptan solicitudes"))
         self.assertTrue(has_closed_linkedin_application_signal("No longer accepting applications"))
         self.assertFalse(has_closed_linkedin_application_signal("Solicita ahora y revisa la descripcion."))
+
+    def test_linkedin_empty_apply_cta_detects_closed_jobs(self) -> None:
+        closed_html = '<div class="top-card-layout__cta-container flex"><!----> <!----></div>'
+        open_html = (
+            '<div class="top-card-layout__cta-container flex">'
+            '<button class="apply-button" data-tracking-control-name="public_jobs_apply-link-onsite">Solicitar</button>'
+            "</div>"
+        )
+
+        self.assertTrue(linkedin_apply_cta_is_empty(closed_html))
+        self.assertFalse(linkedin_apply_cta_is_empty(open_html))
 
     def test_serpapi_linkedin_skips_closed_jobs_from_snippet(self) -> None:
         provider = SerpAPILinkedInProvider()
