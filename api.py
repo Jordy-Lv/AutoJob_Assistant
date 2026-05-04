@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -40,6 +41,16 @@ app.include_router(search.router)
 app.include_router(saved_searches.router)
 app.include_router(jobs.router)
 
-static_dir = Path("frontend/dist")
+static_dir = Path(os.getenv("FRONTEND_DIST_DIR", Path(__file__).resolve().parent / "frontend" / "dist"))
 if static_dir.exists():
     app.mount("/", StaticFiles(directory=static_dir, html=True), name="frontend")
+else:
+    @app.get("/", include_in_schema=False)
+    def frontend_not_built():
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": "Frontend build not found",
+                "expected_path": str(static_dir),
+            },
+        )
