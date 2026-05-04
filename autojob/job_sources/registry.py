@@ -54,6 +54,7 @@ def select_providers(selected_sources: Iterable[str] | None = None) -> tuple[lis
                     "saved": 0,
                     "duplicates": 0,
                     "discarded": 0,
+                    "expired": 0,
                     "error": "Unknown source",
                 }
             )
@@ -76,6 +77,7 @@ def source_summary(
     saved: int = 0,
     duplicates: int = 0,
     discarded: int = 0,
+    expired: int = 0,
 ) -> dict:
     return {
         "id": provider.source_id,
@@ -85,5 +87,6 @@ def source_summary(
         "saved": saved,
         "duplicates": duplicates,
         "discarded": discarded,
+        "expired": expired,
         "error": error,
     }

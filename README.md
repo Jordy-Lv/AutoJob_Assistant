@@ -121,7 +121,7 @@ curl.exe http://127.0.0.1:8501/api/search/sources
 curl.exe http://127.0.0.1:8501/api/search/runs
 ```
 
-Fuentes integradas: Remotive, Arbeitnow y RemoteOK. Adzuna se activa con `ADZUNA_APP_ID` + `ADZUNA_APP_KEY`; SerpAPI se activa con `SERPAPI_KEY` para Google Jobs y para la fuente `LinkedIn via SerpAPI`.
+Fuentes integradas: Remotive, Arbeitnow y RemoteOK. Adzuna se activa con `ADZUNA_APP_ID` + `ADZUNA_APP_KEY`; SerpAPI se activa con `SERPAPI_KEY` para Google Jobs y para la fuente `LinkedIn via SerpAPI`. La fuente de LinkedIn revisa la pagina publica de cada oferta y descarta las que muestren textos como "Ya no se aceptan solicitudes" o "No longer accepting applications".
 
 Para agregar nuevas fuentes, revisa `docs/search_providers.md`.
 
@@ -132,6 +132,9 @@ ADZUNA_APP_ID=
 ADZUNA_APP_KEY=
 ADZUNA_COUNTRY=us
 SERPAPI_KEY=
+SERPAPI_LINKEDIN_VERIFY_APPLY_STATUS=true
+SERPAPI_LINKEDIN_PAGE_TIMEOUT=6
+SERPAPI_LINKEDIN_VERIFY_WORKERS=5
 RAPIDAPI_KEY=
 ```
 

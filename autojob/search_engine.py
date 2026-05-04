@@ -45,6 +45,10 @@ class SearchEngineResult:
         return len(self.discarded_ids)
 
     @property
+    def total_expired(self) -> int:
+        return sum(int(source.get("expired") or 0) for source in self.sources)
+
+    @property
     def errors(self) -> list[dict[str, Any]]:
         return [
             {"source": source["id"], "message": source.get("error") or source["status"]}
@@ -87,6 +91,7 @@ def run_job_search(
                 "saved": 0,
                 "duplicates": 0,
                 "discarded": 0,
+                "expired": 0,
                 "error": "No hay fuentes habilitadas para esta busqueda",
             }
         )
@@ -99,6 +104,7 @@ def run_job_search(
             summary.update({"status": "failed", "error": str(exc)})
             source_summaries.append(summary)
             continue
+        summary["expired"] = int(getattr(provider, "last_expired_count", 0) or 0)
 
         valid_jobs = [
             job
@@ -401,6 +407,7 @@ def search_result_dict(result: SearchEngineResult) -> dict[str, Any]:
         "total_saved": result.total_saved,
         "duplicates": result.duplicates,
         "discarded": result.total_discarded,
+        "expired": result.total_expired,
         "saved": result.total_saved,
         "errors": result.errors,
         "sources": result.sources,

@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+import html
 import os
 import re
 from typing import Any
 from urllib.parse import urlparse
+import unicodedata
+
+import requests
 
 from autojob.models import JobOffer, SearchParams
 
 from .base import (
     JobSourceProvider,
+    USER_AGENT,
     clean_html,
     compact,
     dedupe_text,
@@ -100,6 +106,7 @@ class SerpAPILinkedInProvider(SerpAPIProvider):
     display_name = "LinkedIn via SerpAPI"
 
     def search(self, params: SearchParams) -> list[JobOffer]:
+        self.last_expired_count = 0
         limit = max(min(int(params.limit or 25), 50), 1)
         candidate_limit = min(limit * 3, 100)
         page_size = 10
@@ -138,11 +145,15 @@ class SerpAPILinkedInProvider(SerpAPIProvider):
                     for item in items
                     if isinstance(item, dict) and is_linkedin_job_url(compact(item.get("link")))
                 ]
+                candidate_items: list[dict[str, Any]] = []
                 for item in linkedin_items:
                     url = compact(item.get("link"))
                     if url.lower() in seen_urls:
                         continue
                     seen_urls.add(url.lower())
+                    candidate_items.append(item)
+
+                for item in self.open_linkedin_items(candidate_items):
                     job = self.normalize(item)
                     job.location = linkedin_location(item, params)
                     if params.remote_only:
@@ -159,6 +170,34 @@ class SerpAPILinkedInProvider(SerpAPIProvider):
                 break
 
         return jobs
+
+    def open_linkedin_items(self, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        candidates: list[dict[str, Any]] = []
+        for item in items:
+            if has_closed_linkedin_application_signal(item):
+                self.last_expired_count += 1
+                continue
+            candidates.append(item)
+
+        if not candidates or not linkedin_apply_status_verification_enabled():
+            return candidates
+
+        workers = max(min(int(os.getenv("SERPAPI_LINKEDIN_VERIFY_WORKERS", "5") or 5), 10), 1)
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            closed_flags = list(
+                executor.map(
+                    lambda item: linkedin_job_is_closed_for_applications(compact(item.get("link"))),
+                    candidates,
+                )
+            )
+
+        open_items: list[dict[str, Any]] = []
+        for item, is_closed in zip(candidates, closed_flags, strict=False):
+            if is_closed:
+                self.last_expired_count += 1
+                continue
+            open_items.append(item)
+        return open_items
 
     def normalize(self, raw_job: dict[str, Any]) -> JobOffer:
         title = compact(raw_job.get("title")) or "LinkedIn job"
@@ -257,6 +296,105 @@ def is_linkedin_job_url(url: str) -> bool:
     host = (parsed.netloc or "").lower()
     path = (parsed.path or "").lower()
     return host.endswith("linkedin.com") and "/jobs/view/" in path
+
+
+def linkedin_apply_status_verification_enabled() -> bool:
+    return os.getenv("SERPAPI_LINKEDIN_VERIFY_APPLY_STATUS", "true").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+
+
+def linkedin_job_is_closed_for_applications(url: str) -> bool:
+    if not is_linkedin_job_url(url):
+        return False
+    try:
+        response = requests.get(
+            url,
+            headers={
+                "User-Agent": USER_AGENT,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "es,en;q=0.8",
+            },
+            timeout=linkedin_apply_status_timeout(),
+        )
+    except requests.RequestException:
+        return False
+    if response.status_code >= 400:
+        return False
+    if has_closed_linkedin_application_signal(response.text):
+        return True
+    return False
+
+
+def linkedin_apply_status_timeout() -> float:
+    try:
+        return max(min(float(os.getenv("SERPAPI_LINKEDIN_PAGE_TIMEOUT", "6") or 6), 20.0), 1.0)
+    except ValueError:
+        return 6.0
+
+
+def has_closed_linkedin_application_signal(value: Any) -> bool:
+    sample = normalize_status_text(" ".join(iter_text_values(value)))
+    if not sample:
+        return False
+    return any(normalize_status_text(phrase) in sample for phrase in LINKEDIN_CLOSED_APPLICATION_PHRASES)
+
+
+LINKEDIN_CLOSED_APPLICATION_PHRASES = (
+    "Ya no se aceptan solicitudes",
+    "Ya no acepta solicitudes",
+    "No se aceptan mas solicitudes",
+    "No se aceptan solicitudes",
+    "Solicitudes cerradas",
+    "Esta oferta ya no acepta solicitudes",
+    "Esta oferta ya no esta disponible",
+    "La oferta ya no esta disponible",
+    "No longer accepting applications",
+    "This job is no longer accepting applications",
+    "Applications are no longer accepted",
+    "Applications closed",
+    "Application closed",
+    "This job has expired",
+    "Job has expired",
+    "This job is no longer available",
+    "This job posting is no longer available",
+)
+
+
+def iter_text_values(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        parts: list[str] = []
+        for nested in value.values():
+            parts.extend(iter_text_values(nested))
+        return parts
+    if isinstance(value, (list, tuple, set)):
+        parts = []
+        for nested in value:
+            parts.extend(iter_text_values(nested))
+        return parts
+    return [compact(value)]
+
+
+def normalize_status_text(value: str) -> str:
+    decoded = html.unescape(value or "")
+    decoded = re.sub(
+        r"\\u([0-9a-fA-F]{4})",
+        lambda match: chr(int(match.group(1), 16)),
+        decoded,
+    )
+    without_accents = "".join(
+        char
+        for char in unicodedata.normalize("NFKD", decoded)
+        if not unicodedata.combining(char)
+    )
+    return re.sub(r"\s+", " ", without_accents.lower()).strip()
 
 
 def linkedin_external_id(url: str) -> str:

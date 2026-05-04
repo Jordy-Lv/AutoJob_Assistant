@@ -1070,7 +1070,7 @@ function SavedSearchesView({ showToast, reload }) {
     try {
       const result = await request(`/api/saved-searches/${id}/run`, { method: "POST" });
       const sr = result.search_result || {};
-      showToast(`Ejecutada: ${sr.total_new || 0} nuevas, ${sr.total_updated || 0} actualizadas, ${sr.duplicates || 0} duplicadas, ${sr.discarded || 0} ocultas`);
+      showToast(`Ejecutada: ${sr.total_new || 0} nuevas, ${sr.total_updated || 0} actualizadas, ${sr.duplicates || 0} duplicadas, ${sr.discarded || 0} ocultas, ${sr.expired || 0} cerradas`);
       await load();
       await reload();
     } catch (error) {
@@ -1352,10 +1352,11 @@ function AutoSearchPanel({ sources, reload, showToast, setView }) {
       const newCount = result.total_new ?? 0;
       const updatedCount = result.total_updated ?? 0;
       const discardedCount = result.discarded || 0;
+      const expiredCount = result.expired || 0;
       showToast(
         newCount > 0
-          ? `${newCount} ofertas nuevas guardadas, ${updatedCount} actualizadas, ${discardedCount} ocultas`
-          : `Sin nuevas. ${updatedCount} actualizadas, ${result.duplicates || 0} duplicadas, ${discardedCount} ocultas.`,
+          ? `${newCount} ofertas nuevas guardadas, ${updatedCount} actualizadas, ${discardedCount} ocultas, ${expiredCount} cerradas`
+          : `Sin nuevas. ${updatedCount} actualizadas, ${result.duplicates || 0} duplicadas, ${discardedCount} ocultas, ${expiredCount} cerradas.`,
       );
       await reload();
     } catch (error) {
@@ -1433,11 +1434,11 @@ function AutoSearchPanel({ sources, reload, showToast, setView }) {
       {summary && (
         <div className="source-summary">
           <strong>
-            {summary.total_found} encontradas · {summary.total_new ?? 0} nuevas · {summary.total_updated ?? 0} actualizadas · {summary.duplicates} duplicadas · {summary.discarded || 0} ocultas
+            {summary.total_found} encontradas · {summary.total_new ?? 0} nuevas · {summary.total_updated ?? 0} actualizadas · {summary.duplicates} duplicadas · {summary.discarded || 0} ocultas · {summary.expired || 0} cerradas
           </strong>
           {summary.sources?.map((s) => (
             <span key={s.id} className={s.status === "ok" ? "ok" : "warn"}>
-              {s.name}: {s.found} encontradas, {s.saved} guardadas, {s.discarded || 0} ocultas
+              {s.name}: {s.found} encontradas, {s.saved} guardadas, {s.discarded || 0} ocultas, {s.expired || 0} cerradas
               {s.error ? ` · ${s.error}` : ""}
             </span>
           ))}

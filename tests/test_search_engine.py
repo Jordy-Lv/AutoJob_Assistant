@@ -10,7 +10,12 @@ from autojob.models import JobOffer, SearchParams
 from autojob.search_engine import dedupe_jobs, parse_date, run_job_search
 from autojob.job_sources.base import JobSourceProvider, ProviderError
 from autojob.job_sources.remotive import RemotiveProvider
-from autojob.job_sources.serpapi import SerpAPILinkedInProvider, google_date_tbs, linkedin_queries
+from autojob.job_sources.serpapi import (
+    SerpAPILinkedInProvider,
+    google_date_tbs,
+    has_closed_linkedin_application_signal,
+    linkedin_queries,
+)
 
 
 class FakeProvider(JobSourceProvider):
@@ -46,6 +51,13 @@ def job(**overrides) -> JobOffer:
     }
     values.update(overrides)
     return JobOffer(**values)
+
+
+class FakeLinkedInResponse:
+    def __init__(self, text: str, status_code: int = 200, url: str = "https://www.linkedin.com/jobs/view/1") -> None:
+        self.text = text
+        self.status_code = status_code
+        self.url = url
 
 
 class SearchEngineTests(unittest.TestCase):
@@ -178,6 +190,63 @@ class SearchEngineTests(unittest.TestCase):
         self.assertEqual(google_date_tbs("24h"), "qdr:d")
         self.assertEqual(google_date_tbs("7d"), "qdr:w")
         self.assertEqual(google_date_tbs("30d"), "qdr:m")
+
+    def test_linkedin_closed_application_signal_detects_expired_jobs(self) -> None:
+        self.assertTrue(has_closed_linkedin_application_signal("Ya no se aceptan solicitudes"))
+        self.assertTrue(has_closed_linkedin_application_signal("No longer accepting applications"))
+        self.assertFalse(has_closed_linkedin_application_signal("Solicita ahora y revisa la descripcion."))
+
+    def test_serpapi_linkedin_skips_closed_jobs_from_snippet(self) -> None:
+        provider = SerpAPILinkedInProvider()
+        payload = {
+            "organic_results": [
+                {
+                    "title": "BairesDev hiring Senior Java Developer - Remote Work",
+                    "link": "https://www.linkedin.com/jobs/view/senior-java-developer-remote-work-at-bairesdev-4407197978",
+                    "snippet": "Hace 6 dias. Ya no se aceptan solicitudes.",
+                }
+            ]
+        }
+
+        with (
+            patch.object(provider, "_get_json", return_value=payload),
+            patch("autojob.job_sources.serpapi.requests.get") as get,
+        ):
+            jobs = provider.search(SearchParams(query="Java Developer", limit=5))
+
+        self.assertEqual(jobs, [])
+        self.assertEqual(provider.last_expired_count, 1)
+        get.assert_not_called()
+
+    def test_serpapi_linkedin_skips_closed_jobs_from_visible_page_text(self) -> None:
+        provider = SerpAPILinkedInProvider()
+        payload = {
+            "organic_results": [
+                {
+                    "title": "BairesDev hiring Senior Java Developer - Remote Work",
+                    "link": "https://www.linkedin.com/jobs/view/senior-java-developer-remote-work-at-bairesdev-4407197978",
+                    "snippet": "Build Java services. Hace 6 dias.",
+                }
+            ]
+        }
+        html = """
+        <html>
+          <body>
+            <button>Iniciar sesion</button>
+            <div class="modal">Inicia sesion para ver a quien conoces</div>
+            <span class="closed">Ya no se aceptan solicitudes</span>
+          </body>
+        </html>
+        """
+
+        with (
+            patch.object(provider, "_get_json", return_value=payload),
+            patch("autojob.job_sources.serpapi.requests.get", return_value=FakeLinkedInResponse(html)),
+        ):
+            jobs = provider.search(SearchParams(query="Java Developer", limit=5))
+
+        self.assertEqual(jobs, [])
+        self.assertEqual(provider.last_expired_count, 1)
 
     def test_search_jobs_endpoint_delegates_to_engine(self) -> None:
         fake_result = {
