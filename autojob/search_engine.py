@@ -110,17 +110,14 @@ def run_job_search(
 
             if not save:
                 continue
-            existing_id = db.find_duplicate_job_id(job)
-            if existing_id is not None:
-                duplicates += 1
-                summary["duplicates"] += 1
-                continue
             job_id, was_inserted = db.upsert_job(job)
             saved_ids.append(job_id)
             if was_inserted:
                 new_job_ids.append(job_id)
             else:
                 updated_job_ids.append(job_id)
+                duplicates += 1
+                summary["duplicates"] += 1
             summary["saved"] += 1
             if normalized_params.auto_analyze:
                 analyze_saved_job(job_id)
@@ -204,7 +201,7 @@ def job_matches_params(job: JobOffer, params: SearchParams) -> bool:
     if not params.internship_allowed and job.employment_type == "internship":
         return False
     if params.junior_only:
-        allowed = {"junior"}
+        allowed = {"junior", ""}
         if params.internship_allowed:
             allowed.add("internship")
         if job.seniority not in allowed:

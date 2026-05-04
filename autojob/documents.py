@@ -126,7 +126,7 @@ def generate_letter_docx(
     document.add_paragraph(f"Cargo: {job.title}")
     document.add_paragraph("")
 
-    name = profile.full_name or "Jordy Pardo"
+    name = profile.full_name or "Candidato"
     intro_role = profile.target_role or "desarrollador de software"
     company = job.company or "su equipo"
     document.add_paragraph(
@@ -238,7 +238,7 @@ def generate_letter_pdf(
     SimpleDocTemplate = kit["SimpleDocTemplate"]
 
     path = _letter_path(job, "pdf")
-    name = profile.full_name or "Jordy Pardo"
+    name = profile.full_name or "Candidato"
     intro_role = profile.target_role or "desarrollador de software"
     company = job.company or "su equipo"
     matched = ", ".join(analysis.matched_skills[:6])
@@ -278,7 +278,8 @@ def generate_letter_pdf(
                 styles["BodyText"],
             ),
             Spacer(1, 12),
-            Paragraph(html.escape(f"Saludos,\n{name}"), styles["BodyText"]),
+            Paragraph(html.escape("Saludos,"), styles["BodyText"]),
+            Paragraph(html.escape(name), styles["BodyText"]),
         ]
     )
     doc = SimpleDocTemplate(str(path), pagesize=kit["letter"])

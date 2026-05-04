@@ -221,18 +221,51 @@ function App() {
     }
   }
 
+  const [navOpen, setNavOpen] = useState(false);
+
+  function navigateTo(target) {
+    setView(target);
+    setNavOpen(false);
+  }
+
   return (
     <div className="product-shell">
-      <TopNav
+      <a className="skip-link" href="#main-content">Saltar al contenido</a>
+
+      <Sidebar
         view={view}
-        setView={setView}
+        setView={navigateTo}
         overview={overview}
         onRefresh={() => loadAll({ silent: true })}
         theme={theme}
         toggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+        navOpen={navOpen}
       />
 
-      <main className="workspace" id="main-content">
+      <div
+        className={`sidebar-backdrop ${navOpen ? "open" : ""}`}
+        onClick={() => setNavOpen(false)}
+        aria-hidden="true"
+      />
+
+      <main className="main-column">
+        <header className="mobile-topbar">
+          <div className="mobile-topbar-brand">
+            <div className="brand-mark" aria-hidden="true">AJ</div>
+            <strong>AutoJob Assistant</strong>
+          </div>
+          <button
+            className="icon-button"
+            onClick={() => setNavOpen((c) => !c)}
+            type="button"
+            aria-label={navOpen ? "Cerrar navegación" : "Abrir navegación"}
+            aria-expanded={navOpen}
+          >
+            {navOpen ? <X size={18} /> : <Menu size={18} />}
+          </button>
+        </header>
+
+        <div className="workspace" id="main-content">
         {toast && (
           <button className={`toast ${toast.type}`} onClick={() => setToast(null)} type="button">
             {toast.message}
@@ -295,16 +328,16 @@ function App() {
             {view === "settings" && <SettingsView overview={overview} />}
           </>
         )}
+        </div>
       </main>
     </div>
   );
 }
 
 // ----------------------------------------------------------------------------
-// Top nav
+// Sidebar — navegacion lateral persistente
 // ----------------------------------------------------------------------------
-function TopNav({ view, setView, overview, onRefresh, theme, toggleTheme }) {
-  const [navOpen, setNavOpen] = useState(false);
+function Sidebar({ view, setView, overview, onRefresh, theme, toggleTheme, navOpen }) {
   const healthOk = overview?.health?.ok;
   const navGroups = [
     { key: "primary", label: "Flujo principal" },
@@ -312,46 +345,29 @@ function TopNav({ view, setView, overview, onRefresh, theme, toggleTheme }) {
     { key: "technical", label: "Admin" },
   ];
 
-  function go(target) {
-    setView(target);
-    setNavOpen(false);
-  }
-
   return (
-    <header className="product-nav">
-      <a className="skip-link" href="#main-content">Saltar al contenido</a>
-
-      <div className="brand-lockup">
+    <aside className={`sidebar ${navOpen ? "open" : ""}`} aria-label="Navegacion principal">
+      <div className="sidebar-header">
         <div className="brand-mark" aria-hidden="true">AJ</div>
-        <div>
-          <strong>AutoJob Assistant</strong>
-          <span>Busca ofertas, prepara documentos y aplica manualmente.</span>
+        <div className="brand-text">
+          <strong>AutoJob</strong>
+          <span>Assistant</span>
         </div>
       </div>
 
-      <button
-        className="icon-button nav-toggle"
-        onClick={() => setNavOpen((c) => !c)}
-        type="button"
-        aria-label={navOpen ? "Cerrar navegación" : "Abrir navegación"}
-        aria-expanded={navOpen}
-      >
-        {navOpen ? <X size={18} /> : <Menu size={18} />}
-      </button>
-
-      <nav className={`nav-pills ${navOpen ? "open" : ""}`} aria-label="Navegacion principal">
+      <nav className="sidebar-nav">
         {navGroups.map((group) => (
-          <div key={group.key} className={`nav-group ${group.key}`}>
-            <span className="nav-group-label">{group.label}</span>
+          <div key={group.key} className="nav-section">
+            <span className="nav-section-label">{group.label}</span>
             {NAV_ITEMS.filter((item) => item.group === group.key).map(({ key, label, icon: Icon, hint }) => (
               <button
                 key={key}
-                className={view === key ? "active" : ""}
-                onClick={() => go(key)}
+                className={`nav-item ${view === key ? "active" : ""}`}
+                onClick={() => setView(key)}
                 type="button"
                 title={hint}
               >
-                <Icon size={16} />
+                <Icon size={17} />
                 <span>{label}</span>
               </button>
             ))}
@@ -359,23 +375,23 @@ function TopNav({ view, setView, overview, onRefresh, theme, toggleTheme }) {
         ))}
       </nav>
 
-      <div className="nav-actions">
-        <div className={`system-chip ${healthOk ? "ok" : "bad"}`} title={overview?.health?.database_url || ""}>
-          <Database size={15} />
-          <span>{healthOk ? "DB conectada" : "Revisar DB"}</span>
+      <div className="sidebar-footer">
+        <div className={`sidebar-status ${healthOk ? "" : "bad"}`} title={overview?.health?.database_url || ""}>
+          <span className="dot" aria-hidden="true" />
+          <span>{healthOk ? "Base de datos conectada" : "Revisar conexion"}</span>
         </div>
-        <button className="icon-button" onClick={toggleTheme} type="button" aria-label="Cambiar tema">
-          {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
-        </button>
-        <button className="icon-button" onClick={onRefresh} type="button" aria-label="Actualizar">
-          <RefreshCw size={17} />
-        </button>
-        <button className="button primary nav-capture" onClick={() => go("search")} type="button">
-          <Search size={16} />
-          Buscar ofertas
-        </button>
+        <div className="sidebar-controls">
+          <button onClick={toggleTheme} type="button" aria-label="Cambiar tema">
+            {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+            <span>Tema</span>
+          </button>
+          <button onClick={onRefresh} type="button" aria-label="Actualizar datos">
+            <RefreshCw size={15} />
+            <span>Refrescar</span>
+          </button>
+        </div>
       </div>
-    </header>
+    </aside>
   );
 }
 
@@ -505,7 +521,7 @@ function Dashboard({ overview, jobs, documents, profile, setView }) {
       </section>
 
       {profileProgress < 70 && (
-        <section className="profile-banner compact-banner">
+        <section className="profile-banner">
           <div>
             <UserRound size={20} />
             <div>

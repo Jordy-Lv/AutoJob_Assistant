@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -10,7 +11,13 @@ from autojob import db
 from autojob.routers import documents, jobs, profile, saved_searches, search
 
 
-app = FastAPI(title="AutoJob Assistant API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    db.init_db()
+    yield
+
+
+app = FastAPI(title="AutoJob Assistant API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -19,11 +26,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.on_event("startup")
-def startup() -> None:
-    db.init_db()
 
 
 app.include_router(profile.router)
