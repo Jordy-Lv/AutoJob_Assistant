@@ -103,6 +103,16 @@ def import_text(payload: TextImportPayload) -> dict[str, Any]:
     return job_dict(saved)
 
 
+@router.get("/applications")
+def list_applications(status: str = "Todos", limit: int = 100) -> dict[str, Any]:
+    return {
+        "applications": [
+            asdict(application)
+            for application in db.list_applications(status=status, limit=limit)
+        ]
+    }
+
+
 @router.get("/{job_id}")
 def get_job(job_id: int) -> dict[str, Any]:
     job = db.get_job(job_id)
