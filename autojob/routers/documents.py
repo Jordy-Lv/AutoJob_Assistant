@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from autojob import db
 from autojob.documents import (
@@ -14,7 +14,7 @@ from autojob.documents import (
     generate_letter_pdf,
 )
 
-from .utils import all_documents, analysis_from_job
+from .utils import all_documents, analysis_from_job, resolve_output_file
 
 router = APIRouter(prefix="/api/documents")
 
@@ -30,8 +30,13 @@ def _stream_document(document_id: int, disposition: str):
     document = db.get_document(document_id)
     if document is None:
         raise HTTPException(status_code=404, detail="El documento todavia no existe")
-    job_id = document.get("job_id")
+    path = str(document.get("path") or "")
     doc_type = document.get("doc_type", "")
+    if path:
+        file_path = resolve_output_file(path)
+        return FileResponse(file_path, filename=file_path.name, media_type="text/plain", headers={"Content-Disposition": f'{disposition}; filename="{file_path.name}"'})
+
+    job_id = document.get("job_id")
     job = db.get_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Oferta no encontrada")

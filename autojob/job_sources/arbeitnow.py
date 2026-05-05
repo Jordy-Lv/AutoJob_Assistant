@@ -20,6 +20,7 @@ from .base import (
 class ArbeitnowProvider(JobSourceProvider):
     source_id = "arbeitnow"
     display_name = "Arbeitnow"
+    description = "Empleos remotos globales. Sin API key."
     endpoint = "https://www.arbeitnow.com/api/job-board-api"
 
     def search(self, params: SearchParams) -> list[JobOffer]:

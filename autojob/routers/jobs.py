@@ -16,7 +16,7 @@ from autojob.job_sources import (
     build_manual_job,
     fetch_job_from_url,
 )
-from autojob.models import STATUS_OPTIONS, utc_now_iso
+from autojob.models import STATUS_OPTIONS, JobOffer, utc_now_iso
 from autojob.schemas import (
     AnalyzePayload,
     JobIdsPayload,
@@ -159,6 +159,15 @@ def discard_jobs(payload: JobIdsPayload) -> dict[str, Any]:
     }
 
 
+@router.patch("/{job_id}/viewed")
+def mark_viewed(job_id: int) -> dict[str, Any]:
+    db.mark_job_viewed(job_id)
+    job = db.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Oferta no encontrada")
+    return job_dict(job)
+
+
 @router.post("/{job_id}/analyze")
 def analyze(job_id: int, payload: AnalyzePayload) -> dict[str, Any]:
     job = db.get_job(job_id)
@@ -174,7 +183,13 @@ def analyze(job_id: int, payload: AnalyzePayload) -> dict[str, Any]:
 
 
 @router.post("/{job_id}/documents")
-def documents(job_id: int) -> dict[str, Any]:
+async def documents(job_id: int) -> dict[str, Any]:
+    import asyncio
+
+    return await asyncio.to_thread(_generate_documents, job_id)
+
+
+def _generate_documents(job_id: int) -> dict[str, Any]:
     job = db.get_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Oferta no encontrada")
@@ -188,6 +203,14 @@ def documents(job_id: int) -> dict[str, Any]:
     for doc_type in DOCUMENT_TYPES:
         db.add_document(job_id, doc_type, "")
     return {"documents": documents_for_job(job_id)}
+
+
+@router.delete("/{job_id}", status_code=204)
+def delete_job(job_id: int) -> None:
+    job = db.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Oferta no encontrada")
+    db.delete_job(job_id)
 
 
 @router.post("/{job_id}/apply")

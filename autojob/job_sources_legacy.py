@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import warnings
 from dataclasses import dataclass
 from typing import Any, Iterable
 from urllib.parse import urlparse
@@ -13,6 +14,12 @@ import requests
 from bs4 import BeautifulSoup
 
 from .models import JobOffer
+
+warnings.warn(
+    "autojob.job_sources_legacy is deprecated; import provider-specific modules from autojob.job_sources instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 
 USER_AGENT = (

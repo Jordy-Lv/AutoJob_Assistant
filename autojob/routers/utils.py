@@ -48,6 +48,7 @@ def job_dict(job: JobOffer) -> dict[str, Any]:
         "reasons": job.reasons,
         "gaps": job.gaps,
         "matched_skills": job.matched_skills,
+        "viewed": job.viewed,
         "first_seen_at": job.first_seen_at,
         "created_at": job.created_at,
         "updated_at": job.updated_at,
@@ -61,9 +62,10 @@ def profile_dict(profile: UserProfile) -> dict[str, str]:
     return asdict(profile)
 
 
-def counts(jobs: list[JobOffer]) -> dict[str, int]:
-    return {status: len([job for job in jobs if job.status == status]) for status in STATUS_OPTIONS}
 
+
+def counts(jobs: list[JobOffer]) -> dict[str, int]:
+    return {status: sum(1 for job in jobs if job.status == status) for status in STATUS_OPTIONS}
 
 def resolve_output_file(raw_path: str) -> Path:
     if not raw_path:

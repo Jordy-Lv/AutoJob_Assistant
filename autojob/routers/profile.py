@@ -53,6 +53,12 @@ def overview() -> dict[str, Any]:
         if (job.score or 0) >= 80 and job.status not in ("Aplicada", "Descartada")
     ]
     new_jobs = [job for job in jobs if job_dict(job)["is_new"]]
+    active_jobs = [job for job in jobs if job.status not in ("Aplicada", "Descartada")]
+    recent_jobs = sorted(
+        active_jobs,
+        key=lambda job: job.first_seen_at or job.created_at or "",
+        reverse=True,
+    )
     ready_to_apply = [
         job for job in jobs
         if job.status == "Lista para aplicar" or (job.id in document_job_ids and job.status not in ("Aplicada", "Descartada"))
@@ -68,7 +74,7 @@ def overview() -> dict[str, Any]:
         "new_count": len(new_jobs),
         "ready_to_apply_count": len(ready_to_apply),
         "applied_count": status_counts.get("Aplicada", 0),
-        "recent_jobs": [job_dict(job) for job in jobs[:8]],
+        "recent_jobs": [job_dict(job) for job in recent_jobs[:8]],
         "priority_jobs": [job_dict(job) for job in high_priority[:6]],
         "ready_jobs": [job_dict(job) for job in ready_to_apply[:6]],
         "new_jobs": [job_dict(job) for job in new_jobs[:6]],

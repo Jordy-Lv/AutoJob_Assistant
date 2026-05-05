@@ -20,6 +20,7 @@ from .base import (
 class RemoteOKProvider(JobSourceProvider):
     source_id = "remoteok"
     display_name = "RemoteOK"
+    description = "Tech jobs remotos. Sin API key."
     endpoint = "https://remoteok.com/api"
     retries = 0
 

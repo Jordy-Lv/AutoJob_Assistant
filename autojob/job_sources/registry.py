@@ -45,19 +45,11 @@ def select_providers(selected_sources: Iterable[str] | None = None) -> tuple[lis
     for source_id in requested:
         provider = providers.get(source_id)
         if provider is None:
-            skipped.append(
-                {
-                    "id": source_id,
-                    "name": source_id,
-                    "status": "unknown_source",
-                    "found": 0,
-                    "saved": 0,
-                    "duplicates": 0,
-                    "discarded": 0,
-                    "expired": 0,
-                    "error": "Unknown source",
-                }
-            )
+            skipped.append({
+                "id": source_id, "name": source_id, "status": "unknown_source",
+                "found": 0, "saved": 0, "duplicates": 0, "discarded": 0, "expired": 0,
+                "error": "Unknown source",
+            })
             continue
         if not provider.enabled:
             skipped.append(source_summary(provider, "disabled", "Source disabled"))
@@ -69,24 +61,15 @@ def select_providers(selected_sources: Iterable[str] | None = None) -> tuple[lis
     return selected, skipped
 
 
-def source_summary(
-    provider: JobSourceProvider,
-    status: str = "pending",
-    error: str | None = None,
-    found: int = 0,
-    saved: int = 0,
-    duplicates: int = 0,
-    discarded: int = 0,
-    expired: int = 0,
-) -> dict:
+def source_summary(provider: JobSourceProvider, status: str = "pending", error: str | None = None) -> dict[str, object]:
     return {
         "id": provider.source_id,
         "name": provider.display_name,
         "status": status,
-        "found": found,
-        "saved": saved,
-        "duplicates": duplicates,
-        "discarded": discarded,
-        "expired": expired,
+        "found": 0,
+        "saved": 0,
+        "duplicates": 0,
+        "discarded": 0,
+        "expired": 0,
         "error": error,
     }
