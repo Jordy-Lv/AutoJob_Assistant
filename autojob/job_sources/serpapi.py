@@ -26,10 +26,58 @@ from .base import (
     string_list,
 )
 
+# Max pages to fetch per search (each page ≈ 10 results from Google Jobs).
+SERPAPI_MAX_PAGES = int(os.getenv("SERPAPI_MAX_PAGES", "5"))
+# Set to "true" to bypass SerpAPI cache — uses more credits but guarantees fresh results.
+SERPAPI_NO_CACHE = os.getenv("SERPAPI_NO_CACHE", "").lower() in ("1", "true", "yes")
+
+# Map our date_filter values to the label text we look for in SerpAPI's
+# "Date posted" filter options.  Multiple synonyms handle API wording changes.
+_DATE_FILTER_LABELS: dict[str, list[str]] = {
+    "24h": ["today", "yesterday", "last 24"],
+    "1d":  ["today", "yesterday", "last 24"],
+    "2d":  ["last 3 days", "past 3 days", "3 days"],
+    "3d":  ["last 3 days", "past 3 days", "3 days"],
+    "4d":  ["past week", "last week", "week"],
+    "7d":  ["past week", "last week", "week"],
+    "week": ["past week", "last week", "week"],
+    "14d": ["past month", "last month", "month"],
+    "30d": ["past month", "last month", "month"],
+    "month": ["past month", "last month", "month"],
+}
+
+# Legacy chips fallback — still accepted by SerpAPI even though Google
+# considers the parameter deprecated.  Used when the probe request returns
+# no recognisable "Date posted" filter options.
+#
+# NOTE: For tight filters (24h/1d/2d) we deliberately use a BROADER
+# server-side window (3days) so Google Jobs returns something.  The local
+# matches_date_filter() call in search_engine.py applies the exact cutoff.
+_DATE_CHIPS: dict[str, str] = {
+    "24h":   "date_posted:3days",
+    "1d":    "date_posted:3days",
+    "2d":    "date_posted:3days",
+    "3d":    "date_posted:3days",
+    "4d":    "date_posted:week",
+    "7d":    "date_posted:week",
+    "week":  "date_posted:week",
+    "14d":   "date_posted:month",
+    "30d":   "date_posted:month",
+    "month": "date_posted:month",
+}
+
+_NO_RESULTS_ERROR_MARKERS = (
+    "google hasn't returned any results",
+    "google has not returned any results",
+    "no results for this query",
+)
+
 
 class SerpAPIProvider(JobSourceProvider):
     source_id = "serpapi"
     display_name = "SerpAPI Google Jobs"
+    description = "Google Jobs indexado via SerpAPI. Requiere cuenta en serpapi.com"
+    env_vars = ["SERPAPI_KEY"]
     requires_api_key = True
     endpoint = "https://serpapi.com/search.json"
 
@@ -44,19 +92,73 @@ class SerpAPIProvider(JobSourceProvider):
         if params.remote_only and "remote" not in query.lower():
             query = f"{query} remote"
         location = serpapi_location(params.location)
-        payload = self._get_json(
-            self.endpoint,
-            {
-                "engine": "google_jobs",
-                "q": query,
-                "location": location,
-                "api_key": os.getenv("SERPAPI_KEY", ""),
-            },
-        )
-        if isinstance(payload, dict) and payload.get("error"):
-            raise RuntimeError(str(payload.get("error")))
-        items = payload.get("jobs_results", []) if isinstance(payload, dict) else []
-        return [self.normalize(item) for item in items[: max(params.limit, 1)] if isinstance(item, dict)]
+        date_filter = (params.date_filter or "").strip().lower()
+        apply_date = date_filter and date_filter not in ("any", "all")
+
+        # Over-fetch so that local date filtering still yields enough results.
+        fetch_limit = min(max(params.limit * 2, 20), SERPAPI_MAX_PAGES * 10)
+
+        base_params: dict[str, Any] = {
+            "engine": "google_jobs",
+            "q": query,
+            "location": location,
+            "api_key": os.getenv("SERPAPI_KEY", ""),
+        }
+        if SERPAPI_NO_CACHE:
+            base_params["no_cache"] = "true"
+
+        req_params = dict(base_params)
+
+        if apply_date:
+            # Probe: one unfiltered request to obtain the live "Date posted"
+            # filter tokens (uds) that Google embeds in the response.
+            try:
+                probe = self._safe_request(base_params, allow_probe_error=True)
+            except Exception:
+                probe = {}
+            uds, q_update = _extract_date_uds(probe, _DATE_FILTER_LABELS.get(date_filter, []))
+            if uds:
+                req_params["uds"] = uds
+                if q_update:
+                    req_params["q"] = q_update
+            else:
+                # Fall back to the legacy chips parameter.
+                chips = _DATE_CHIPS.get(date_filter)
+                if chips:
+                    req_params["chips"] = chips
+
+        all_items: list[dict[str, Any]] = []
+        next_page_token: str | None = None
+
+        for _ in range(SERPAPI_MAX_PAGES):
+            page_params = dict(req_params)
+            if next_page_token:
+                page_params["next_page_token"] = next_page_token
+
+            payload = self._safe_request(page_params)
+            items = payload.get("jobs_results", [])
+            all_items.extend(item for item in items if isinstance(item, dict))
+
+            pagination = payload.get("serpapi_pagination") or {}
+            next_page_token = pagination.get("next_page_token") if isinstance(pagination, dict) else None
+
+            if not next_page_token or len(all_items) >= fetch_limit:
+                break
+
+        return [self.normalize(item) for item in all_items[:fetch_limit] if isinstance(item, dict)]
+
+    def _safe_request(self, params: dict[str, Any], *, allow_probe_error: bool = False) -> dict[str, Any]:
+        payload = self._get_json(self.endpoint, params)
+        if not isinstance(payload, dict):
+            return {}
+        if payload.get("error"):
+            error = compact(payload["error"])
+            if _is_no_results_error(error):
+                return {}
+            if allow_probe_error:
+                return {}
+            raise RuntimeError(error)
+        return payload
 
     def normalize(self, raw_job: dict[str, Any]) -> JobOffer:
         title = compact(raw_job.get("title")) or "Untitled role"
@@ -85,6 +187,42 @@ class SerpAPIProvider(JobSourceProvider):
 
     def _health_request(self) -> None:
         self.search(SearchParams(query="developer", limit=1))
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _extract_date_uds(
+    payload: dict[str, Any],
+    labels: list[str],
+) -> tuple[str | None, str | None]:
+    """Search the SerpAPI filters array for a Date-posted option matching any
+    of the given label substrings.  Returns (uds, q_update) or (None, None)."""
+    filters = payload.get("filters")
+    if not isinstance(filters, list):
+        return None, None
+    labels_lower = [l.lower() for l in labels]
+    for group in filters:
+        if not isinstance(group, dict):
+            continue
+        group_type = str(group.get("type", "") or group.get("name", "")).lower()
+        if "date" not in group_type and "posted" not in group_type:
+            continue
+        for option in (group.get("options") or []):
+            if not isinstance(option, dict):
+                continue
+            text = str(option.get("text") or option.get("name") or "").lower()
+            if any(lbl in text or text in lbl for lbl in labels_lower):
+                uds = option.get("uds") or None
+                q_update = option.get("q") or None
+                return uds, q_update
+    return None, None
+
+
+def _is_no_results_error(message: str) -> bool:
+    lowered = message.lower()
+    return any(marker in lowered for marker in _NO_RESULTS_ERROR_MARKERS)
 
 
 def first_apply_link(raw_job: dict[str, Any]) -> str:

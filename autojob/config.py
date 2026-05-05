@@ -21,7 +21,12 @@ if load_dotenv is not None:
 
 
 def database_url() -> str:
-    return os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
+    url = os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL).strip()
+    if url.startswith("postgres://"):
+        return f"postgresql+psycopg://{url.removeprefix('postgres://')}"
+    if url.startswith("postgresql://"):
+        return f"postgresql+psycopg://{url.removeprefix('postgresql://')}"
+    return url
 
 
 def ensure_directories() -> None:

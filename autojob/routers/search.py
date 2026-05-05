@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import asdict
 from typing import Any
 
@@ -24,7 +25,7 @@ def remotive_search(payload: SearchPayload) -> dict[str, Any]:
 
 
 @router.post("/search/jobs")
-def search_jobs(payload: JobSearchPayload) -> dict[str, Any]:
+async def search_jobs(payload: JobSearchPayload) -> dict[str, Any]:
     if len(payload.query.strip()) < 2:
         raise HTTPException(status_code=400, detail="Escribe una busqueda de al menos 2 caracteres")
     params = JobSearchParams(
@@ -39,7 +40,7 @@ def search_jobs(payload: JobSearchPayload) -> dict[str, Any]:
         page=payload.page,
         auto_analyze=payload.auto_analyze,
     )
-    result = run_job_search(params, save=payload.save_results)
+    result = await asyncio.to_thread(run_job_search, params, save=payload.save_results)
     return search_result_dict(result)
 
 

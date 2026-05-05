@@ -19,6 +19,7 @@ from .base import (
 class RemotiveProvider(JobSourceProvider):
     source_id = "remotive"
     display_name = "Remotive"
+    description = "Ofertas remotas verificadas. Sin API key."
     endpoint = "https://remotive.com/api/remote-jobs"
 
     def search(self, params: SearchParams) -> list[JobOffer]:

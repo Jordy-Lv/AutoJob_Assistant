@@ -75,6 +75,7 @@ class JobOffer:
     reasons: list[str] = field(default_factory=list)
     gaps: list[str] = field(default_factory=list)
     matched_skills: list[str] = field(default_factory=list)
+    viewed: bool = False
     first_seen_at: str = field(default_factory=utc_now_iso)
     created_at: str = field(default_factory=utc_now_iso)
     updated_at: str = field(default_factory=utc_now_iso)

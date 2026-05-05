@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 import re
@@ -8,7 +9,7 @@ from typing import Any
 from . import db
 from .job_sources.base import JobSourceProvider, ProviderError
 from .job_sources.registry import select_providers, source_summary
-from .models import JobOffer, SearchParams
+from .models import JobOffer, SearchParams, UserProfile
 
 
 @dataclass(slots=True)
@@ -96,57 +97,64 @@ def run_job_search(
             }
         )
 
-    for provider in selected:
-        summary = source_summary(provider)
-        try:
-            provider_jobs = provider.search(normalized_params)
-        except (ProviderError, Exception) as exc:
-            summary.update({"status": "failed", "error": str(exc)})
-            source_summaries.append(summary)
-            continue
-        summary["expired"] = int(getattr(provider, "last_expired_count", 0) or 0)
+    profile = db.get_profile() if normalized_params.auto_analyze else None
 
-        valid_jobs = [
-            job
-            for job in filter_jobs(provider_jobs, normalized_params)
-            if is_valid_job_result(job)
-        ]
-        summary["found"] = len(valid_jobs)
-
-        for job in valid_jobs:
-            keys = dedupe_keys(job)
-            if any(key in seen_keys for key in keys):
-                duplicates += 1
-                summary["duplicates"] += 1
-                continue
-            seen_keys.update(keys)
-
-            if save:
-                discarded_id = db.find_discarded_job_id(job)
-                if discarded_id is not None:
-                    discarded_ids.append(discarded_id)
-                    summary["discarded"] = int(summary.get("discarded") or 0) + 1
+    if selected:
+        with ThreadPoolExecutor(max_workers=len(selected)) as executor:
+            futures = {executor.submit(_call_provider, provider, normalized_params): provider for provider in selected}
+            for future in as_completed(futures):
+                provider, result = future.result()
+                summary = source_summary(provider)
+                summary["expired"] = int(getattr(provider, "last_expired_count", 0) or 0)
+                if isinstance(result, Exception):
+                    summary.update({"status": "failed", "error": str(result)})
+                    source_summaries.append(summary)
                     continue
 
-            response_jobs.append(job)
+                valid_jobs = [
+                    job
+                    for job in filter_jobs(result, normalized_params)
+                    if is_valid_job_result(job)
+                ]
+                summary["found"] = len(valid_jobs)
 
-            if not save:
-                continue
-            job_id, was_inserted = db.upsert_job(job)
-            saved_ids.append(job_id)
-            if was_inserted:
-                new_job_ids.append(job_id)
-            else:
-                updated_job_ids.append(job_id)
-                duplicates += 1
-                summary["duplicates"] += 1
-            summary["saved"] += 1
-            if normalized_params.auto_analyze:
-                analyze_saved_job(job_id)
+                for job in valid_jobs:
+                    keys = dedupe_keys(job)
+                    if any(key in seen_keys for key in keys):
+                        duplicates += 1
+                        summary["duplicates"] += 1
+                        continue
+                    seen_keys.update(keys)
 
-        summary["status"] = "ok"
-        summary["error"] = None
-        source_summaries.append(summary)
+                    if save:
+                        discarded_id = db.find_discarded_job_id(job)
+                        if discarded_id is not None:
+                            discarded_ids.append(discarded_id)
+                            summary["discarded"] = int(summary.get("discarded") or 0) + 1
+                            continue
+
+                    response_jobs.append(job)
+
+                    if not save:
+                        continue
+                    existing_id = db.find_duplicate_job_id(job)
+                    if existing_id is not None:
+                        duplicates += 1
+                        summary["duplicates"] += 1
+                        continue
+                    job_id, was_inserted = db.upsert_job(job)
+                    saved_ids.append(job_id)
+                    if was_inserted:
+                        new_job_ids.append(job_id)
+                    else:
+                        updated_job_ids.append(job_id)
+                    summary["saved"] += 1
+                    if profile is not None:
+                        analyze_saved_job(job_id, profile=profile)
+
+                summary["status"] = "ok"
+                summary["error"] = None
+                source_summaries.append(summary)
 
     limited_jobs = response_jobs[: normalized_params.limit]
     status = result_status(limited_jobs, source_summaries)
@@ -283,6 +291,8 @@ def result_status(jobs: list[JobOffer], sources: list[dict[str, Any]]) -> str:
 
 def matches_query(job: JobOffer, query: str) -> bool:
     terms = [term.lower() for term in query.split() if term.strip()]
+    if not terms:
+        return True
     haystack = " ".join(
         [
             job.title,
@@ -292,7 +302,9 @@ def matches_query(job: JobOffer, query: str) -> bool:
             " ".join(job.tags),
         ]
     ).lower()
-    return all(term in haystack for term in terms)
+    matched = sum(1 for term in terms if term in haystack)
+    threshold = max(1, round(len(terms) * 0.6))
+    return matched >= threshold
 
 
 def matches_location(job: JobOffer, location: str) -> bool:
@@ -308,51 +320,85 @@ def matches_date_filter(value: str, date_filter: str) -> bool:
     days = {
         "24h": 1,
         "1d": 1,
+        "2d": 2,
+        "3d": 3,
+        "4d": 4,
         "7d": 7,
         "week": 7,
+        "14d": 14,
         "30d": 30,
         "month": 30,
     }.get(date_filter)
     if days is None:
         return True
+    if not value or not value.strip():
+        return False
     parsed = parse_date(value)
     if parsed is None:
-        return True
+        return False
     return parsed >= datetime.now(timezone.utc) - timedelta(days=days)
+
+
+_RELATIVE_DATE_RE = re.compile(
+    r"(\d+)\s*(second|minute|hour|day|week|month|year)s?\s*ago",
+    re.IGNORECASE,
+)
+# Spanish: "hace 2 días", "hace 3 horas", "hace 1 semana"
+_SPANISH_RELATIVE_RE = re.compile(
+    r"hace\s+(\d+)\s*(segundo|minuto|hora|d[ií]a|semana|mes|a[ñn]o)s?",
+    re.IGNORECASE,
+)
+_UNIT_DAYS: dict[str, int] = {
+    # English
+    "second": 0, "minute": 0, "hour": 0,
+    "day": 1, "week": 7, "month": 30, "year": 365,
+    # Spanish
+    "segundo": 0, "minuto": 0, "hora": 0,
+    "dia": 1, "día": 1, "semana": 7, "mes": 30, "año": 365, "ano": 365,
+}
+_TODAY_STRINGS = frozenset([
+    "just posted", "today", "just now", "ahora", "hoy",
+    "ahora mismo", "recién publicada", "recien publicada",
+    "nueva", "newly posted",
+])
+_YESTERDAY_STRINGS = frozenset(["yesterday", "ayer"])
 
 
 def parse_date(value: str) -> datetime | None:
     text = (value or "").strip()
     if not text:
         return None
-    lowered = text.lower()
-    relative = re.search(r"(\d+)\s+(minute|minutes|hour|hours|day|days|week|weeks|month|months)\s+ago", lowered)
-    if relative:
-        amount = int(relative.group(1))
-        unit = relative.group(2)
-        if unit.startswith("minute"):
-            return datetime.now(timezone.utc) - timedelta(minutes=amount)
-        if unit.startswith("hour"):
-            return datetime.now(timezone.utc) - timedelta(hours=amount)
-        if unit.startswith("day"):
-            return datetime.now(timezone.utc) - timedelta(days=amount)
-        if unit.startswith("week"):
-            return datetime.now(timezone.utc) - timedelta(weeks=amount)
-        if unit.startswith("month"):
-            return datetime.now(timezone.utc) - timedelta(days=amount * 30)
-    if lowered in {"today", "just now"}:
-        return datetime.now(timezone.utc)
-    if lowered == "yesterday":
-        return datetime.now(timezone.utc) - timedelta(days=1)
+
     try:
         parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
     except ValueError:
-        parsed = parse_named_date(text)
-        if parsed is None:
-            return None
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        pass
+
+    now = datetime.now(timezone.utc)
+    lowered = text.lower()
+    if lowered in _TODAY_STRINGS:
+        return now
+    if lowered in _YESTERDAY_STRINGS:
+        return now - timedelta(days=1)
+
+    m = _RELATIVE_DATE_RE.search(lowered)
+    if m:
+        amount = int(m.group(1))
+        unit = m.group(2).lower().rstrip("s")
+        days = _UNIT_DAYS.get(unit, 0) * amount
+        return now - timedelta(days=days)
+
+    m = _SPANISH_RELATIVE_RE.search(lowered)
+    if m:
+        amount = int(m.group(1))
+        unit = m.group(2).lower()
+        days = _UNIT_DAYS.get(unit, _UNIT_DAYS.get(unit.rstrip("s"), 0)) * amount
+        return now - timedelta(days=days)
+
+    return parse_named_date(text)
 
 
 def parse_named_date(value: str) -> datetime | None:
@@ -367,13 +413,20 @@ def parse_named_date(value: str) -> datetime | None:
     return None
 
 
-def analyze_saved_job(job_id: int) -> None:
+def _call_provider(provider: JobSourceProvider, params: SearchParams) -> tuple[JobSourceProvider, list[JobOffer] | Exception]:
+    try:
+        return provider, provider.search(params)
+    except Exception as exc:
+        return provider, exc
+
+
+def analyze_saved_job(job_id: int, profile: UserProfile | None = None) -> None:
     from .analyzer import analyze_job
 
     job = db.get_job(job_id)
     if job is None:
         return
-    result = analyze_job(db.get_profile(), job)
+    result = analyze_job(profile or db.get_profile(), job)
     db.update_job_analysis(job_id, result.score, result.reasons, result.gaps, result.matched_skills)
 
 

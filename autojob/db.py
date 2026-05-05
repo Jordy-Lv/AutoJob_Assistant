@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from functools import lru_cache
 import re
 from typing import Any, Iterable
@@ -13,7 +14,6 @@ from sqlalchemy import (
     Index,
     Integer,
     MetaData,
-    String,
     Table,
     Text,
     and_,
@@ -25,7 +25,7 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.engine import Connection
-from sqlalchemy.dialects.postgresql import JSONB, insert as pg_insert
+from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, insert as pg_insert
 from sqlalchemy.engine import Engine, RowMapping
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import create_engine
@@ -40,7 +40,6 @@ from .models import (
     SearchParams,
     SearchRun,
     UserProfile,
-    utc_now_iso,
 )
 
 
@@ -59,7 +58,7 @@ profile_table = Table(
     Column("projects", Text, nullable=False, server_default=""),
     Column("links", Text, nullable=False, server_default=""),
     Column("keywords", Text, nullable=False, server_default=""),
-    Column("updated_at", String(40), nullable=False),
+    Column("updated_at", TIMESTAMP(timezone=True), nullable=False),
 )
 
 jobs_table = Table(
@@ -75,7 +74,7 @@ jobs_table = Table(
     Column("description", Text, nullable=False, server_default=""),
     Column("tags", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
     Column("salary", Text, nullable=False, server_default=""),
-    Column("published_at", Text, nullable=False, server_default=""),
+    Column("published_at", TIMESTAMP(timezone=True)),
     Column("remote", Boolean, nullable=False, server_default=text("false")),
     Column("seniority", Text, nullable=False, server_default=""),
     Column("employment_type", Text, nullable=False, server_default=""),
@@ -89,10 +88,11 @@ jobs_table = Table(
     Column("priority", Integer, nullable=False, server_default="0"),
     Column("ai_provider", Text, nullable=False, server_default=""),
     Column("ai_summary", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
-    Column("first_seen_at", String(40), nullable=False),
-    Column("last_seen_at", String(40), nullable=False),
-    Column("created_at", String(40), nullable=False),
-    Column("updated_at", String(40), nullable=False),
+    Column("viewed", Boolean, nullable=False, server_default=text("false")),
+    Column("first_seen_at", TIMESTAMP(timezone=True), nullable=False),
+    Column("last_seen_at", TIMESTAMP(timezone=True), nullable=False),
+    Column("created_at", TIMESTAMP(timezone=True), nullable=False),
+    Column("updated_at", TIMESTAMP(timezone=True), nullable=False),
 )
 Index("idx_jobs_source_external_id", jobs_table.c.source, jobs_table.c.external_id, unique=True)
 Index("idx_jobs_status", jobs_table.c.status)
@@ -108,7 +108,7 @@ documents_table = Table(
     Column("doc_type", Text, nullable=False),
     Column("path", Text, nullable=False),
     Column("metadata", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
-    Column("created_at", String(40), nullable=False),
+    Column("created_at", TIMESTAMP(timezone=True), nullable=False),
 )
 Index("idx_documents_job_id", documents_table.c.job_id)
 
@@ -120,8 +120,8 @@ automation_runs_table = Table(
     Column("status", Text, nullable=False),
     Column("summary", Text, nullable=False, server_default=""),
     Column("log", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
-    Column("started_at", String(40), nullable=False),
-    Column("finished_at", String(40)),
+    Column("started_at", TIMESTAMP(timezone=True), nullable=False),
+    Column("finished_at", TIMESTAMP(timezone=True)),
 )
 Index("idx_automation_runs_started_at", automation_runs_table.c.started_at)
 
@@ -136,8 +136,8 @@ applications_table = Table(
     Column("documents_used", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
     Column("log", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
     Column("screenshot_path", Text, nullable=False, server_default=""),
-    Column("created_at", String(40), nullable=False),
-    Column("updated_at", String(40), nullable=False),
+    Column("created_at", TIMESTAMP(timezone=True), nullable=False),
+    Column("updated_at", TIMESTAMP(timezone=True), nullable=False),
 )
 Index("idx_applications_job_id", applications_table.c.job_id)
 Index("idx_applications_status", applications_table.c.status)
@@ -149,7 +149,7 @@ source_configs_table = Table(
     Column("name", Text, nullable=False, unique=True),
     Column("enabled", Integer, nullable=False, server_default="1"),
     Column("config", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
-    Column("updated_at", String(40), nullable=False),
+    Column("updated_at", TIMESTAMP(timezone=True), nullable=False),
 )
 
 search_runs_table = Table(
@@ -165,8 +165,8 @@ search_runs_table = Table(
     Column("errors", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
     Column("sources", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
     Column("status", Text, nullable=False),
-    Column("started_at", String(40), nullable=False),
-    Column("finished_at", String(40)),
+    Column("started_at", TIMESTAMP(timezone=True), nullable=False),
+    Column("finished_at", TIMESTAMP(timezone=True)),
 )
 Index("idx_search_runs_started_at", search_runs_table.c.started_at)
 Index("idx_search_runs_status", search_runs_table.c.status)
@@ -187,10 +187,10 @@ saved_searches_table = Table(
     Column("interval_minutes", Integer, nullable=False, server_default="360"),
     Column("enabled", Boolean, nullable=False, server_default=text("true")),
     Column("baseline_done", Boolean, nullable=False, server_default=text("false")),
-    Column("last_run_at", String(40)),
+    Column("last_run_at", TIMESTAMP(timezone=True)),
     Column("last_run_status", Text, nullable=False, server_default=""),
-    Column("created_at", String(40), nullable=False),
-    Column("updated_at", String(40), nullable=False),
+    Column("created_at", TIMESTAMP(timezone=True), nullable=False),
+    Column("updated_at", TIMESTAMP(timezone=True), nullable=False),
 )
 Index("idx_saved_searches_enabled", saved_searches_table.c.enabled)
 
@@ -203,7 +203,7 @@ notifications_table = Table(
     Column("channel", Text, nullable=False),
     Column("status", Text, nullable=False),
     Column("error", Text, nullable=False, server_default=""),
-    Column("sent_at", String(40), nullable=False),
+    Column("sent_at", TIMESTAMP(timezone=True), nullable=False),
 )
 Index("idx_notifications_saved_search_id", notifications_table.c.saved_search_id)
 Index(
@@ -217,7 +217,15 @@ Index(
 
 @lru_cache(maxsize=1)
 def get_engine() -> Engine:
-    return create_engine(database_url(), pool_pre_ping=True, future=True)
+    return create_engine(
+        database_url(),
+        pool_pre_ping=True,
+        future=True,
+        pool_size=5,
+        max_overflow=10,
+        pool_timeout=30,
+        pool_recycle=1800,
+    )
 
 
 def init_db() -> None:
@@ -227,6 +235,37 @@ def init_db() -> None:
     _ensure_schema_extensions(engine)
 
 
+
+def _timestamp_migration_statement(table: str, column: str, fallback: str = "NULL") -> str:
+    expression = (
+        f"CASE "
+        f"WHEN NULLIF({column}::TEXT, '') IS NULL THEN {fallback} "
+        f"WHEN {column}::TEXT ~ '^\\d{{4}}-\\d{{2}}-\\d{{2}}' THEN {column}::TEXT::TIMESTAMPTZ "
+        f"ELSE {fallback} "
+        f"END"
+    )
+    # When the fallback is NULL, rows with empty/invalid dates become NULL.
+    # We must drop any NOT NULL constraint first so the cast doesn't fail.
+    drop_notnull = (
+        f"        EXECUTE $sql$ALTER TABLE {table} ALTER COLUMN {column} DROP NOT NULL$sql$;\n"
+        if fallback == "NULL" else ""
+    )
+    return f"""DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = '{table}'
+          AND column_name = '{column}'
+          AND data_type <> 'timestamp with time zone'
+    ) THEN
+        EXECUTE $sql$ALTER TABLE {table} ALTER COLUMN {column} DROP DEFAULT$sql$;
+{drop_notnull}        EXECUTE $sql$ALTER TABLE {table} ALTER COLUMN {column} TYPE TIMESTAMPTZ USING {expression}$sql$;
+    END IF;
+END $$
+"""
+
 def _ensure_schema_extensions(engine: Engine) -> None:
     statements = [
         "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS remote BOOLEAN NOT NULL DEFAULT FALSE",
@@ -234,13 +273,32 @@ def _ensure_schema_extensions(engine: Engine) -> None:
         "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS employment_type TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS normalized_url TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS job_fingerprint TEXT NOT NULL DEFAULT ''",
-        "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS first_seen_at VARCHAR(40) NOT NULL DEFAULT ''",
-        "UPDATE jobs SET first_seen_at = created_at WHERE first_seen_at = ''",
+        "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()",
+        "UPDATE jobs SET first_seen_at = COALESCE(NULLIF(created_at::TEXT, '')::TIMESTAMPTZ, NOW()) WHERE first_seen_at IS NULL",
+        _timestamp_migration_statement("jobs", "first_seen_at", "NOW()"),
+        _timestamp_migration_statement("jobs", "last_seen_at", "NOW()"),
+        _timestamp_migration_statement("jobs", "created_at", "NOW()"),
+        _timestamp_migration_statement("jobs", "updated_at", "NOW()"),
+        _timestamp_migration_statement("jobs", "published_at"),
+        _timestamp_migration_statement("profile", "updated_at", "NOW()"),
+        _timestamp_migration_statement("documents", "created_at", "NOW()"),
+        _timestamp_migration_statement("automation_runs", "started_at", "NOW()"),
+        _timestamp_migration_statement("automation_runs", "finished_at"),
+        _timestamp_migration_statement("applications", "created_at", "NOW()"),
+        _timestamp_migration_statement("applications", "updated_at", "NOW()"),
+        _timestamp_migration_statement("source_configs", "updated_at", "NOW()"),
+        _timestamp_migration_statement("search_runs", "started_at", "NOW()"),
+        _timestamp_migration_statement("search_runs", "finished_at"),
+        _timestamp_migration_statement("saved_searches", "last_run_at"),
+        _timestamp_migration_statement("saved_searches", "created_at", "NOW()"),
+        _timestamp_migration_statement("saved_searches", "updated_at", "NOW()"),
+        _timestamp_migration_statement("notifications", "sent_at", "NOW()"),
         "CREATE INDEX IF NOT EXISTS idx_jobs_normalized_url ON jobs (normalized_url)",
         "CREATE INDEX IF NOT EXISTS idx_jobs_fingerprint ON jobs (job_fingerprint)",
         "CREATE INDEX IF NOT EXISTS idx_jobs_first_seen_at ON jobs (first_seen_at)",
         "ALTER TABLE search_runs ADD COLUMN IF NOT EXISTS duplicates INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE search_runs ADD COLUMN IF NOT EXISTS sources JSONB NOT NULL DEFAULT '[]'::jsonb",
+        "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS viewed BOOLEAN NOT NULL DEFAULT FALSE",
     ]
     with engine.begin() as conn:
         for statement in statements:
@@ -256,6 +314,29 @@ def check_database_health() -> dict[str, Any]:
     except SQLAlchemyError as exc:
         return {"ok": False, "database_url": _safe_url(url), "error": str(exc)}
 
+
+
+def _parse_timestamp(value: Any) -> datetime | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _now_timestamp() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _timestamp_to_iso(value: Any) -> str:
+    parsed = _parse_timestamp(value)
+    return parsed.isoformat(timespec="seconds") if parsed else ""
 
 def _safe_url(url: str) -> str:
     if "@" not in url or "://" not in url:
@@ -328,7 +409,7 @@ def _row_to_job(row: RowMapping) -> JobOffer:
         description=row["description"] or "",
         tags=_clean_list(row["tags"]),
         salary=row["salary"] or "",
-        published_at=row["published_at"] or "",
+        published_at=_timestamp_to_iso(row["published_at"]),
         remote=bool(row.get("remote", False)),
         seniority=row.get("seniority") or "",
         employment_type=row.get("employment_type") or "",
@@ -337,9 +418,10 @@ def _row_to_job(row: RowMapping) -> JobOffer:
         reasons=_clean_list(row["reasons"]),
         gaps=_clean_list(row["gaps"]),
         matched_skills=_clean_list(row["matched_skills"]),
-        first_seen_at=row.get("first_seen_at") or row["created_at"],
-        created_at=row["created_at"],
-        updated_at=row["updated_at"],
+        viewed=bool(row.get("viewed", False)),
+        first_seen_at=_timestamp_to_iso(row.get("first_seen_at") or row["created_at"]),
+        created_at=_timestamp_to_iso(row["created_at"]),
+        updated_at=_timestamp_to_iso(row["updated_at"]),
     )
 
 
@@ -353,8 +435,8 @@ def _row_to_application(row: RowMapping) -> ApplicationRecord:
         documents_used=_clean_list(row["documents_used"]),
         log=list(row["log"] or []),
         screenshot_path=row["screenshot_path"] or "",
-        created_at=row["created_at"],
-        updated_at=row["updated_at"],
+        created_at=_timestamp_to_iso(row["created_at"]),
+        updated_at=_timestamp_to_iso(row["updated_at"]),
     )
 
 
@@ -365,8 +447,8 @@ def _row_to_run(row: RowMapping) -> AutomationRun:
         status=row["status"],
         summary=row["summary"] or "",
         log=list(row["log"] or []),
-        started_at=row["started_at"],
-        finished_at=row["finished_at"],
+        started_at=_timestamp_to_iso(row["started_at"]),
+        finished_at=_timestamp_to_iso(row["finished_at"]),
     )
 
 
@@ -387,12 +469,12 @@ def get_profile() -> UserProfile:
         projects=row["projects"],
         links=row["links"],
         keywords=row["keywords"],
-        updated_at=row["updated_at"],
+        updated_at=_timestamp_to_iso(row["updated_at"]),
     )
 
 
 def save_profile(profile: UserProfile) -> None:
-    now = utc_now_iso()
+    now = _now_timestamp()
     values = {
         "id": 1,
         "full_name": profile.full_name,
@@ -422,7 +504,7 @@ def upsert_job(job: JobOffer) -> tuple[int, bool]:
     the row was created for the first time. Existing offers (matched by
     source+external_id, normalized_url or job_fingerprint) return False.
     """
-    now = utc_now_iso()
+    now = _now_timestamp()
     normalized_url = normalize_job_url(job.url)
     fingerprint = job_identity_fingerprint(job.title, job.company, job.location)
     values = {
@@ -435,7 +517,7 @@ def upsert_job(job: JobOffer) -> tuple[int, bool]:
         "description": job.description,
         "tags": _clean_list(job.tags),
         "salary": job.salary,
-        "published_at": job.published_at,
+        "published_at": _parse_timestamp(job.published_at),
         "remote": bool(job.remote),
         "seniority": job.seniority,
         "employment_type": job.employment_type,
@@ -596,7 +678,16 @@ def update_job_status(job_id: int, status: str) -> None:
         conn.execute(
             update(jobs_table)
             .where(jobs_table.c.id == job_id)
-            .values(status=status, updated_at=utc_now_iso())
+            .values(status=status, updated_at=_now_timestamp())
+        )
+
+
+def mark_job_viewed(job_id: int) -> None:
+    with get_engine().begin() as conn:
+        conn.execute(
+            update(jobs_table)
+            .where(jobs_table.c.id == job_id)
+            .values(viewed=True, updated_at=_now_timestamp())
         )
 
 
@@ -620,7 +711,7 @@ def update_job_analysis(
                 matched_skills=_clean_list(matched_skills),
                 ai_provider=ai_provider,
                 ai_summary=ai_summary or {},
-                updated_at=utc_now_iso(),
+                updated_at=_now_timestamp(),
             )
         )
 
@@ -638,7 +729,7 @@ def add_document(job_id: int, doc_type: str, path: str, metadata_: dict[str, Any
                 doc_type=doc_type,
                 path=path,
                 metadata=metadata_ or {},
-                created_at=utc_now_iso(),
+                created_at=_now_timestamp(),
             )
         )
 
@@ -702,7 +793,7 @@ def create_search_run(params: SearchParams) -> int:
             errors=[],
             sources=[],
             status="running",
-            started_at=utc_now_iso(),
+            started_at=_now_timestamp(),
             finished_at=None,
         )
         .returning(search_runs_table.c.id)
@@ -731,7 +822,7 @@ def finish_search_run(
                 duplicates=duplicates,
                 errors=errors or [],
                 sources=sources or [],
-                finished_at=utc_now_iso(),
+                finished_at=_now_timestamp(),
             )
         )
 
@@ -748,8 +839,8 @@ def _row_to_search_run(row: RowMapping) -> SearchRun:
         errors=list(row["errors"] or []),
         sources=list(row.get("sources", []) or []),
         status=row["status"],
-        started_at=row["started_at"],
-        finished_at=row["finished_at"],
+        started_at=_timestamp_to_iso(row["started_at"]),
+        finished_at=_timestamp_to_iso(row["finished_at"]),
     )
 
 
@@ -772,7 +863,7 @@ def create_automation_run(run_type: str, status: str = "En ejecucion", summary: 
             status=status,
             summary=summary,
             log=[],
-            started_at=utc_now_iso(),
+            started_at=_now_timestamp(),
             finished_at=None,
         )
         .returning(automation_runs_table.c.id)
@@ -795,7 +886,7 @@ def finish_automation_run(
                 status=status,
                 summary=summary,
                 log=log or [],
-                finished_at=utc_now_iso(),
+                finished_at=_now_timestamp(),
             )
         )
 
@@ -820,7 +911,7 @@ def create_application(
     log: list[dict[str, Any]] | None = None,
     screenshot_path: str = "",
 ) -> int:
-    now = utc_now_iso()
+    now = _now_timestamp()
     stmt = (
         applications_table.insert()
         .values(
@@ -846,7 +937,7 @@ def update_application(
     log: list[dict[str, Any]] | None = None,
     screenshot_path: str | None = None,
 ) -> None:
-    values: dict[str, Any] = {"status": status, "updated_at": utc_now_iso()}
+    values: dict[str, Any] = {"status": status, "updated_at": _now_timestamp()}
     if log is not None:
         values["log"] = log
     if screenshot_path is not None:
@@ -906,10 +997,10 @@ def _row_to_saved_search(row: RowMapping) -> SavedSearch:
         interval_minutes=int(row["interval_minutes"] or 0),
         enabled=bool(row.get("enabled", True)),
         baseline_done=bool(row.get("baseline_done", False)),
-        last_run_at=row["last_run_at"],
+        last_run_at=_timestamp_to_iso(row["last_run_at"]),
         last_run_status=row["last_run_status"] or "",
-        created_at=row["created_at"],
-        updated_at=row["updated_at"],
+        created_at=_timestamp_to_iso(row["created_at"]),
+        updated_at=_timestamp_to_iso(row["updated_at"]),
     )
 
 
@@ -931,7 +1022,7 @@ def get_saved_search(saved_search_id: int) -> SavedSearch | None:
 
 
 def create_saved_search(search: SavedSearch) -> int:
-    now = utc_now_iso()
+    now = _now_timestamp()
     stmt = (
         saved_searches_table.insert()
         .values(
@@ -975,9 +1066,14 @@ def update_saved_search(saved_search_id: int, search: SavedSearch) -> None:
                 score_threshold=float(search.score_threshold or 0.0),
                 interval_minutes=int(search.interval_minutes or 360),
                 enabled=bool(search.enabled),
-                updated_at=utc_now_iso(),
+                updated_at=_now_timestamp(),
             )
         )
+
+
+def delete_job(job_id: int) -> None:
+    with get_engine().begin() as conn:
+        conn.execute(jobs_table.delete().where(jobs_table.c.id == job_id))
 
 
 def delete_saved_search(saved_search_id: int) -> None:
@@ -993,9 +1089,9 @@ def mark_saved_search_run(
     baseline_done: bool | None = None,
 ) -> None:
     values: dict[str, Any] = {
-        "last_run_at": utc_now_iso(),
+        "last_run_at": _now_timestamp(),
         "last_run_status": status,
-        "updated_at": utc_now_iso(),
+        "updated_at": _now_timestamp(),
     }
     if baseline_done is not None:
         values["baseline_done"] = bool(baseline_done)
@@ -1015,7 +1111,7 @@ def _row_to_notification(row: RowMapping) -> NotificationRecord:
         channel=row["channel"],
         status=row["status"],
         error=row["error"] or "",
-        sent_at=row["sent_at"],
+        sent_at=_timestamp_to_iso(row["sent_at"]),
     )
 
 
@@ -1050,7 +1146,7 @@ def record_notification(
             channel=channel,
             status=status,
             error=error,
-            sent_at=utc_now_iso(),
+            sent_at=_now_timestamp(),
         )
         .returning(notifications_table.c.id)
     )

@@ -1,0 +1,48 @@
+import { Bell, Briefcase, Database, ExternalLink, FileArchive, FileText, Gauge, ListChecks, Search, Target, UserRound, WandSparkles } from "lucide-react";
+
+export const THEME_KEY = "autojob-theme";
+
+export const STATUSES = ["Nueva", "Vista", "Interesante", "Lista para aplicar", "Aplicada", "Descartada"];
+
+export const STATUS_LABELS = {
+  Nueva: "Nueva",
+  Vista: "Vista",
+  Interesante: "Interesante",
+  "Lista para aplicar": "Lista para aplicar",
+  Aplicada: "Aplicada manualmente",
+  Descartada: "Descartada",
+  Aprobada: "Lista para aplicar",
+  "En aplicacion": "Aplicada manualmente",
+  "Captcha requerido": "Aplicada manualmente",
+  "Necesita revision": "Lista para aplicar",
+  Error: "Descartada",
+};
+
+export const NAV_ITEMS = [
+  { key: "dashboard", label: "Inicio", icon: Gauge, hint: "Resumen y siguiente accion", group: "primary" },
+  { key: "search", label: "Buscar ofertas", icon: Search, hint: "Buscar o capturar oportunidades", group: "primary" },
+  { key: "jobs", label: "Ofertas", icon: Briefcase, hint: "Revisar oportunidades", group: "primary" },
+  { key: "saved", label: "Automatizacion", icon: Bell, hint: "Busquedas automaticas", group: "secondary" },
+  { key: "documents", label: "Documentos", icon: FileArchive, hint: "CV y carta por oferta", group: "secondary" },
+  { key: "profile", label: "Perfil", icon: UserRound, hint: "Tu base profesional", group: "secondary" },
+  { key: "settings", label: "Configuracion", icon: Database, hint: "Estado tecnico", group: "technical" },
+];
+
+export const FLOW_STEPS = [
+  { key: "profile", label: "Configurar perfil", icon: UserRound, target: "profile" },
+  { key: "search", label: "Buscar ofertas", icon: Search, target: "search" },
+  { key: "review", label: "Revisar bandeja", icon: ListChecks, target: "jobs" },
+  { key: "analyze", label: "Analizar compatibilidad", icon: WandSparkles, target: "jobs" },
+  { key: "top", label: "Mejores oportunidades", icon: Target, target: "jobs" },
+  { key: "documents", label: "Generar CV / carta", icon: FileText, target: "documents" },
+  { key: "apply", label: "Aplicar manualmente", icon: ExternalLink, target: "jobs" },
+];
+
+export const JOB_FILTERS = [
+  { key: "all", label: "Todas" },
+  { key: "new", label: "Nuevas" },
+  { key: "viewed", label: "Vistas" },
+  { key: "good", label: "Buen match" },
+  { key: "docs", label: "Con documentos" },
+  { key: "applied", label: "Aplicadas" },
+];

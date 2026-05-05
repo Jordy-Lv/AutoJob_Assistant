@@ -22,6 +22,8 @@ from .base import (
 class AdzunaProvider(JobSourceProvider):
     source_id = "adzuna"
     display_name = "Adzuna"
+    description = "Motor de búsqueda laboral global. Requiere cuenta gratuita en developer.adzuna.com"
+    env_vars = ["ADZUNA_APP_ID", "ADZUNA_APP_KEY"]
     requires_api_key = True
     endpoint_template = "https://api.adzuna.com/v1/api/jobs/{country}/search/{page}"
 

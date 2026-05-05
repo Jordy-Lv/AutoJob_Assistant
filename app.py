@@ -1,3 +1,4 @@
+# DEPRECATED: legacy Streamlit launcher. The supported API entrypoint is api.py.
 from __future__ import annotations
 
 import socket

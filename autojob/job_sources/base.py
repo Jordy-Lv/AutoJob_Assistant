@@ -8,7 +8,7 @@ import os
 import re
 import time
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-from typing import Any
+from typing import Any, ClassVar
 
 import requests
 from bs4 import BeautifulSoup
@@ -80,6 +80,8 @@ class SearchResult:
 class JobSourceProvider(ABC):
     source_id = "base"
     display_name = "Base"
+    description = ""
+    env_vars: ClassVar[list[str]] = []
     enabled = True
     requires_api_key = False
     timeout_seconds = DEFAULT_TIMEOUT_SECONDS
@@ -139,6 +141,8 @@ class JobSourceProvider(ABC):
         return {
             "id": self.source_id,
             "name": self.display_name,
+            "description": self.description,
+            "env_vars": self.env_vars,
             "enabled": self.enabled,
             "configured": configured,
             "requires_api_key": self.requires_api_key,
@@ -281,12 +285,30 @@ def timestamp_to_iso(value: Any) -> str:
     return datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat(timespec="seconds")
 
 
+_EXP_RE = re.compile(
+    r"(\d+)\+?\s*(?:to\s*\d+\s*)?years?\s*(?:of\s+)?(?:experience|exp\b)",
+    re.IGNORECASE,
+)
+_MIN_EXP_RE = re.compile(
+    r"(?:minimum|at least|m[ií]nimo)\s+(\d+)\s*(?:\+\s*)?years?",
+    re.IGNORECASE,
+)
+
+
 def infer_seniority(title: str, description: str = "", tags: list[str] | None = None) -> str:
-    sample = " ".join([title, description[:1000], " ".join(tags or [])]).lower()
+    sample = " ".join([title, description[:1500], " ".join(tags or [])]).lower()
     if any(marker in sample for marker in ("internship", "intern ", "trainee", "apprentice", "practicante")):
         return "internship"
-    if any(marker in sample for marker in ("junior", "entry level", "entry-level", "graduate", "jr.")):
+    if any(marker in sample for marker in ("junior", "entry level", "entry-level", "graduate", "jr.", "fresher", "recién graduado", "sin experiencia")):
         return "junior"
+    for pattern in (_MIN_EXP_RE, _EXP_RE):
+        m = pattern.search(sample)
+        if m:
+            years = int(m.group(1))
+            if years >= 4:
+                return "senior"
+            if years <= 1:
+                return "junior"
     if any(marker in sample for marker in ("senior", "sr.", "lead", "principal", "staff", "architect")):
         return "senior"
     return "mid"

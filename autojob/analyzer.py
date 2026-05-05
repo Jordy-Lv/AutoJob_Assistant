@@ -32,39 +32,116 @@ STOP_WORDS = {
 
 TECH_VOCABULARY = {
     "agile",
+    "ajax",
+    "android",
     "angular",
+    "ansible",
     "api",
+    "asp.net",
     "aws",
     "azure",
+    "bash",
     "beautifulsoup",
+    "bigquery",
+    "bootstrap",
+    "c",
+    "c#",
+    "c++",
+    "celery",
     "ci",
+    "circleci",
+    "cloudflare",
+    "confluence",
     "css",
+    "data engineering",
+    "databricks",
     "django",
     "docker",
+    "dotnet",
+    "dynamodb",
+    "elasticsearch",
+    "express",
     "fastapi",
+    "figma",
+    "firebase",
     "flask",
+    "flutter",
+    "gcp",
     "git",
+    "github",
+    "github actions",
+    "gitlab",
+    "gitlab ci",
+    "go",
+    "golang",
     "graphql",
+    "grpc",
     "html",
+    "ios",
     "java",
     "javascript",
+    "jenkins",
+    "jira",
+    "kafka",
+    "keras",
+    "kotlin",
     "kubernetes",
+    "lambda",
+    "langchain",
+    "laravel",
     "linux",
+    "machine learning",
+    "microservices",
     "mongodb",
+    "mysql",
+    "nestjs",
     "next.js",
+    "nginx",
     "node",
     "node.js",
+    "nosql",
+    "numpy",
+    "openai",
+    "oracle",
+    "pandas",
+    "php",
     "playwright",
+    "postgres",
     "postgresql",
+    "pulumi",
+    "py test",
+    "pytest",
+    "pytorch",
     "python",
+    "rails",
     "react",
+    "react native",
     "redis",
+    "redux",
     "rest",
+    "ruby",
+    "rust",
+    "s3",
+    "scala",
+    "scikit-learn",
+    "selenium",
+    "serverless",
+    "spring",
+    "spring boot",
     "sql",
     "sqlite",
+    "sqlalchemy",
     "streamlit",
+    "swift",
+    "tailwind",
+    "tensorflow",
+    "terraform",
     "typescript",
     "vue",
+    "webpack",
+    "windows",
+    "xml",
+    "yaml",
 }
 
 
@@ -156,14 +233,18 @@ def analyze_job(profile: UserProfile, job: JobOffer) -> AnalysisResult:
     score = round(min(100.0, score), 1)
 
     reasons: list[str] = []
-    if matched_skills:
+    if not profile_skills:
+        reasons.append("Configura tus habilidades en el perfil para mejorar el an?lisis.")
+    elif matched_skills:
         reasons.append(
             "Coinciden habilidades clave: " + ", ".join(matched_skills[:8])
         )
     else:
         reasons.append("No se encontraron coincidencias directas con las habilidades guardadas.")
 
-    if keyword_matches:
+    if not requested_keywords:
+        reasons.append("Configura palabras objetivo en el perfil para afinar el an?lisis.")
+    elif keyword_matches:
         reasons.append("Coinciden palabras objetivo: " + ", ".join(keyword_matches[:8]))
     if role_match:
         reasons.append("El titulo de la oferta se alinea con el rol objetivo.")

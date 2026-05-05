@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 
 from .analyzer import analyze_job
@@ -27,50 +28,47 @@ def analyze_job_with_optional_ai(
         from openai import OpenAI
 
         client = OpenAI()
-        response = client.responses.create(
-            model=os.getenv("OPENAI_MODEL", DEFAULT_MODEL),
-            input=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Eres un asistente de carrera para desarrolladores de software. "
-                        "Responde solo JSON valido con: score, reasons, gaps, "
-                        "matched_skills, recommendation. score debe ser 0-100."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": json.dumps(
-                        {
-                            "profile": {
-                                "target_role": profile.target_role,
-                                "summary": profile.summary,
-                                "skills": profile.skills,
-                                "experience": profile.experience,
-                                "projects": profile.projects,
-                                "keywords": profile.keywords,
-                            },
-                            "job": {
-                                "title": job.title,
-                                "company": job.company,
-                                "location": job.location,
-                                "description": job.description[:9000],
-                                "tags": job.tags,
-                            },
-                            "local_baseline": {
-                                "score": fallback.score,
-                                "reasons": fallback.reasons,
-                                "gaps": fallback.gaps,
-                                "matched_skills": fallback.matched_skills,
-                                "recommendation": fallback.recommendation,
-                            },
-                        },
-                        ensure_ascii=False,
-                    ),
-                },
-            ],
+        system_prompt = (
+            "Eres un asistente de carrera para desarrolladores de software. "
+            "Responde solo JSON valido con: score, reasons, gaps, "
+            "matched_skills, recommendation. score debe ser 0-100."
         )
-        payload = json.loads(response.output_text)
+        user_prompt = json.dumps(
+            {
+                "profile": {
+                    "target_role": profile.target_role,
+                    "summary": profile.summary,
+                    "skills": profile.skills,
+                    "experience": profile.experience,
+                    "projects": profile.projects,
+                    "keywords": profile.keywords,
+                },
+                "job": {
+                    "title": job.title,
+                    "company": job.company,
+                    "location": job.location,
+                    "description": job.description[:9000],
+                    "tags": job.tags,
+                },
+                "local_baseline": {
+                    "score": fallback.score,
+                    "reasons": fallback.reasons,
+                    "gaps": fallback.gaps,
+                    "matched_skills": fallback.matched_skills,
+                    "recommendation": fallback.recommendation,
+                },
+            },
+            ensure_ascii=False,
+        )
+        response = client.chat.completions.create(
+            model=os.getenv("OPENAI_MODEL", DEFAULT_MODEL),
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format={"type": "json_object"},
+        )
+        payload = json.loads(response.choices[0].message.content or "{}")
         return AnalysisResult(
             score=round(float(payload.get("score", fallback.score)), 1),
             reasons=_clean_list(payload.get("reasons")) or fallback.reasons,
@@ -78,7 +76,8 @@ def analyze_job_with_optional_ai(
             matched_skills=_clean_list(payload.get("matched_skills")) or fallback.matched_skills,
             recommendation=str(payload.get("recommendation") or fallback.recommendation),
         )
-    except Exception:
+    except Exception as exc:
+        logging.getLogger(__name__).warning("OpenAI analysis failed: %s", exc)
         return fallback
 
 
