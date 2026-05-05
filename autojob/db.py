@@ -244,8 +244,13 @@ def _timestamp_migration_statement(table: str, column: str, fallback: str = "NUL
         f"ELSE {fallback} "
         f"END"
     )
-    return f"""
-DO $$
+    # When the fallback is NULL, rows with empty/invalid dates become NULL.
+    # We must drop any NOT NULL constraint first so the cast doesn't fail.
+    drop_notnull = (
+        f"        EXECUTE $sql$ALTER TABLE {table} ALTER COLUMN {column} DROP NOT NULL$sql$;\n"
+        if fallback == "NULL" else ""
+    )
+    return f"""DO $$
 BEGIN
     IF EXISTS (
         SELECT 1
@@ -256,7 +261,7 @@ BEGIN
           AND data_type <> 'timestamp with time zone'
     ) THEN
         EXECUTE $sql$ALTER TABLE {table} ALTER COLUMN {column} DROP DEFAULT$sql$;
-        EXECUTE $sql$ALTER TABLE {table} ALTER COLUMN {column} TYPE TIMESTAMPTZ USING {expression}$sql$;
+{drop_notnull}        EXECUTE $sql$ALTER TABLE {table} ALTER COLUMN {column} TYPE TIMESTAMPTZ USING {expression}$sql$;
     END IF;
 END $$
 """

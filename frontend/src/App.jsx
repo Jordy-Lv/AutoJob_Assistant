@@ -967,7 +967,7 @@ function SavedSearchesView({ showToast, reload }) {
     try {
       await request(`/api/saved-searches/${id}`, { method: "DELETE" });
       setPendingDeleteId(null);
-      showToast("B?squeda eliminada");
+      showToast("Búsqueda eliminada");
       await load();
     } catch (error) {
       showToast(error.message, "error");
@@ -1071,7 +1071,7 @@ function SavedSearchesView({ showToast, reload }) {
                   </button>
                   {pendingDeleteId === saved.id ? (
                     <>
-                      <span className="muted-line">?Eliminar?</span>
+                      <span className="muted-line">¿Eliminar?</span>
                       <button className="button ghost compact danger" onClick={() => remove(saved.id)} type="button">
                         Confirmar
                       </button>
