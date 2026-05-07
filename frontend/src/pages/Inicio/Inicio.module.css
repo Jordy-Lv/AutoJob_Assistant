@@ -1,0 +1,223 @@
+.page {
+  margin: 0 auto;
+  max-width: var(--content-max);
+}
+
+.header {
+  align-items: flex-end;
+  display: flex;
+  gap: var(--space-6);
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+}
+
+.eyebrow {
+  color: var(--accent-400);
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  margin-bottom: var(--space-1);
+  text-transform: uppercase;
+}
+
+.header h1 {
+  color: var(--text-primary);
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.header p {
+  color: var(--text-secondary);
+  margin-top: var(--space-2);
+}
+
+.primaryLink,
+.inlineLink,
+.secondaryLink {
+  align-items: center;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 600;
+  min-height: 38px;
+  padding: 9px 18px;
+  transition: all 150ms ease-out;
+}
+
+.primaryLink,
+.inlineLink {
+  background: linear-gradient(180deg, var(--primary-500) 0%, var(--primary-600) 100%);
+  border: 1px solid var(--primary-border-button);
+  box-shadow: var(--button-shadow-primary);
+  color: var(--text-on-accent);
+}
+
+.primaryLink:hover,
+.inlineLink:hover {
+  box-shadow: var(--button-shadow-primary-hover);
+  filter: brightness(1.08);
+}
+
+.primaryLink:active,
+.inlineLink:active {
+  box-shadow: var(--button-shadow-primary-active);
+  transform: scale(0.98);
+}
+
+.secondaryLink {
+  background: var(--interactive-ghost);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  margin-top: var(--space-4);
+}
+
+.secondaryLink:hover {
+  background: var(--interactive-ghost-hover);
+  border-color: var(--border-strong);
+}
+
+.stats {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: var(--space-6);
+}
+
+.grid {
+  align-items: start;
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: minmax(0, 1fr) 340px;
+}
+
+.mainStack,
+.sideStack {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.nextAction {
+  align-items: center;
+  display: flex;
+  gap: var(--space-4);
+  justify-content: space-between;
+}
+
+.nextAction h2 {
+  color: var(--text-primary);
+  font-size: 18px;
+}
+
+.nextAction p,
+.profileBox p {
+  color: var(--text-secondary);
+  margin-top: var(--space-1);
+}
+
+.jobList,
+.statusList {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.jobRow,
+.statusRow {
+  align-items: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card-compact);
+  box-shadow: var(--card-shadow-base), var(--card-highlight);
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+  padding: 16px;
+  transition: all 150ms ease-out;
+}
+
+.jobRow:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-default);
+  box-shadow: var(--card-shadow-hover), var(--card-highlight);
+  transform: translateY(-1px);
+}
+
+.jobRow strong {
+  color: var(--text-primary);
+  display: block;
+  font-size: 14px;
+}
+
+.jobRow span {
+  color: var(--text-tertiary);
+  display: block;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.profileBox strong {
+  color: var(--text-primary);
+  display: block;
+  margin-top: var(--space-4);
+}
+
+.progressTrack {
+  background: var(--bg-elevated);
+  border-radius: 999px;
+  height: 8px;
+  overflow: hidden;
+}
+
+.progressTrack span {
+  background: var(--primary-500);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  transition: width 200ms ease-out;
+}
+
+.statusRow {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.error {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--card-shadow-base), var(--card-highlight);
+  margin: var(--space-8) auto;
+  max-width: 520px;
+  padding: 20px;
+}
+
+.error strong {
+  color: var(--text-primary);
+}
+
+.error p {
+  color: var(--text-secondary);
+  margin: var(--space-2) 0 var(--space-4);
+}
+
+@media (max-width: 1100px) {
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .header,
+  .nextAction {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .stats {
+    grid-template-columns: 1fr;
+  }
+}

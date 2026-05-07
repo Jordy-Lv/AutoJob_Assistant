@@ -8,7 +8,6 @@ import {
   Gauge,
   History,
   ListChecks,
-  RadioTower,
   Search,
   Target,
   UserRound,
@@ -34,16 +33,15 @@ export const STATUS_LABELS = {
 };
 
 export const NAV_ITEMS = [
-  { key: "dashboard", label: "Inicio", icon: Gauge, hint: "Resumen y siguiente accion", group: "primary" },
-  { key: "search", label: "Buscar ofertas", icon: Search, hint: "Buscar o capturar oportunidades", group: "primary" },
-  { key: "jobs", label: "Ofertas", icon: Briefcase, hint: "Revisar oportunidades", group: "primary" },
-  { key: "analysis", label: "Analisis", icon: WandSparkles, hint: "Scores y brechas", group: "primary" },
-  { key: "sources", label: "Fuentes", icon: RadioTower, hint: "Estado de proveedores", group: "secondary" },
-  { key: "saved", label: "Guardados", icon: Bell, hint: "Busquedas automaticas", group: "secondary" },
-  { key: "documents", label: "Documentos", icon: FileArchive, hint: "CV y carta por oferta", group: "secondary" },
-  { key: "profile", label: "Perfil", icon: UserRound, hint: "Tu base profesional", group: "secondary" },
-  { key: "history", label: "Historial", icon: History, hint: "Busquedas y aplicaciones", group: "secondary" },
-  { key: "settings", label: "Configuracion", icon: Database, hint: "Estado tecnico", group: "technical" },
+  { key: "inicio", path: "/", label: "Inicio", icon: Gauge, hint: "Resumen y siguiente accion", group: "primary" },
+  { key: "buscar", path: "/buscar", label: "Buscar ofertas", icon: Search, hint: "Buscar o capturar oportunidades", group: "primary" },
+  { key: "ofertas", path: "/ofertas", label: "Ofertas", icon: Briefcase, hint: "Revisar oportunidades", group: "primary", counterKey: "ofertas" },
+  { key: "analisis", path: "/analisis", label: "Analisis", icon: WandSparkles, hint: "Scores y brechas", group: "primary", counterKey: "pendientes" },
+  { key: "guardados", path: "/guardados", label: "Guardados", icon: Bell, hint: "Busquedas automaticas", group: "secondary", counterKey: "guardados" },
+  { key: "documentos", path: "/documentos", label: "Documentos", icon: FileArchive, hint: "CV y carta por oferta", group: "secondary", counterKey: "documentos" },
+  { key: "perfil", path: "/perfil", label: "Perfil", icon: UserRound, hint: "Tu base profesional", group: "secondary" },
+  { key: "historial", path: "/historial", label: "Historial", icon: History, hint: "Busquedas y aplicaciones", group: "secondary" },
+  { key: "configuracion", path: "/configuracion", label: "Configuracion", icon: Database, hint: "Estado tecnico", group: "technical" },
 ];
 
 export const FLOW_STEPS = [

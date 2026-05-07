@@ -1,0 +1,139 @@
+.page {
+  margin: 0 auto;
+  max-width: var(--content-max);
+}
+
+.header {
+  align-items: flex-end;
+  display: flex;
+  gap: var(--space-4);
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+}
+
+.eyebrow {
+  color: var(--accent-400);
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  margin-bottom: var(--space-1);
+  text-transform: uppercase;
+}
+
+.header h1 {
+  color: var(--text-primary);
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.header p {
+  color: var(--text-secondary);
+  margin-top: var(--space-2);
+}
+
+.stats {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: var(--space-6);
+}
+
+.table {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.head,
+.row {
+  align-items: center;
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: 1.1fr 150px 140px minmax(0, 1.3fr);
+}
+
+.head {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 0 12px;
+  text-transform: uppercase;
+}
+
+.row {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card-compact);
+  box-shadow: var(--card-shadow-base), var(--card-highlight);
+  padding: 16px;
+  transition: all 150ms ease-out;
+}
+
+.row:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-default);
+  box-shadow: var(--card-shadow-hover), var(--card-highlight);
+  transform: translateY(-1px);
+}
+
+.row strong,
+.row small {
+  display: block;
+}
+
+.row strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.row small,
+.row p {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.row p {
+  overflow-wrap: anywhere;
+}
+
+.error {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--card-shadow-base), var(--card-highlight);
+  margin: var(--space-8) auto;
+  max-width: 520px;
+  padding: 20px;
+}
+
+.error p {
+  color: var(--text-secondary);
+  margin: var(--space-2) 0 var(--space-4);
+}
+
+@media (max-width: 940px) {
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .head {
+    display: none;
+  }
+
+  .row {
+    align-items: flex-start;
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .stats {
+    grid-template-columns: 1fr;
+  }
+}

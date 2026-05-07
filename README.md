@@ -84,6 +84,47 @@ $env:VITE_API_PROXY_TARGET="http://127.0.0.1:8000"
 npm run dev
 ```
 
+## Frontend React
+
+El dashboard fue reestructurado como una app React 18 + Vite con React Router v6, CSS Modules y fetch nativo centralizado.
+
+Estructura principal:
+
+```text
+frontend/src/
+  styles/              variables.css, reset.css, global.css
+  api/                 client.js, endpoints.js
+  context/             AppContext.jsx, ToastContext.jsx
+  hooks/               useFetch.js, useToast.js, useTheme.js
+  components/ui/       Button, Card, Input, Badge, EmptyState, StatCard, Toast, Modal, Spinner
+  components/layout/   Sidebar, TopBar, Layout
+  pages/               Inicio, BuscarOfertas, Ofertas, Analisis, Fuentes, Guardados, Documentos, Perfil, Historial, Configuracion
+  utils/               formatters.js
+  App.jsx              providers + router
+```
+
+Paleta y tema:
+
+- Los tokens viven en `frontend/src/styles/variables.css`.
+- `:root` define la paleta central con capas `--bg-base`, `--bg-elevated`, `--bg-card`, `--bg-card-hover`, `--bg-input`, bordes `--border-subtle/default/strong/focus`, texto `--text-primary/secondary/tertiary/disabled`, marca `--primary-*`, acento `--accent-*` y estados semanticos.
+- Los colores de componentes deben salir de esos tokens; no agregues colores literales en CSS Modules.
+- Los componentes consumen variables CSS desde sus `.module.css`; no se usa Tailwind, styled-components ni CSS-in-JS.
+
+Agregar una vista nueva:
+
+1. Crear `frontend/src/pages/NuevaVista/NuevaVista.jsx` y `NuevaVista.module.css`.
+2. Registrar la ruta en `frontend/src/App.jsx`.
+3. Agregar el item de navegacion en `frontend/src/constants.js` con `path`, `group`, `icon` y `counterKey` si necesita contador real.
+4. Consumir datos mediante `useFetch` y endpoints definidos en `frontend/src/api/endpoints.js`.
+
+Extender el tema:
+
+1. Agregar el token en `variables.css` bajo `:root`.
+2. Si cambia en modo claro, agregar su override en `[data-theme="light"]`.
+3. Usar el token desde CSS Modules, nunca desde estilos inline salvo valores dinamicos como progreso.
+
+El wrapper `frontend/src/api/client.js` registra el ultimo error HTTP real. El layout muestra el badge inferior derecho con status, endpoint, mensaje y timestamp, y el boton inferior izquierdo `Revisar DB` ejecuta `GET /api/health`.
+
 Dashboard anterior en Streamlit:
 
 ```powershell

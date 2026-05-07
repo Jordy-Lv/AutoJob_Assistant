@@ -1,0 +1,134 @@
+.page {
+  margin: 0 auto;
+  max-width: var(--content-max);
+}
+
+.header {
+  margin-bottom: var(--space-6);
+}
+
+.eyebrow {
+  color: var(--accent-400);
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  margin-bottom: var(--space-1);
+  text-transform: uppercase;
+}
+
+.header h1 {
+  color: var(--text-primary);
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.header p {
+  color: var(--text-secondary);
+  margin-top: var(--space-2);
+}
+
+.stats {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: var(--space-6);
+}
+
+.grid {
+  align-items: start;
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.rows {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.row {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card-compact);
+  box-shadow: var(--card-shadow-base), var(--card-highlight);
+  display: grid;
+  gap: var(--space-3);
+  padding: 16px;
+  transition: all 150ms ease-out;
+}
+
+.row:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-default);
+  box-shadow: var(--card-shadow-hover), var(--card-highlight);
+  transform: translateY(-1px);
+}
+
+.rowHead {
+  align-items: flex-start;
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+}
+
+.row strong,
+.row span {
+  display: block;
+}
+
+.row strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.row span {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.inlineError {
+  background: var(--danger-bg);
+  border-radius: var(--radius-sm);
+  color: var(--danger-500);
+  font-size: 12px;
+  padding: 8px 10px;
+}
+
+.error {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--card-shadow-base), var(--card-highlight);
+  margin: var(--space-8) auto;
+  max-width: 520px;
+  padding: 20px;
+}
+
+.error p {
+  color: var(--text-secondary);
+  margin: var(--space-2) 0 var(--space-4);
+}
+
+@media (max-width: 980px) {
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .stats {
+    grid-template-columns: 1fr;
+  }
+}

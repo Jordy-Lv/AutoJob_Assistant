@@ -1,0 +1,88 @@
+.shell {
+  background: var(--bg-base);
+  display: flex;
+  min-height: 100vh;
+}
+
+.main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.content {
+  flex: 1;
+  padding: var(--space-6);
+}
+
+.dbCheck,
+.errorBadge {
+  align-items: center;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  font-size: 12px;
+  font-weight: 800;
+  gap: var(--space-2);
+  min-height: 34px;
+  padding: 0 12px;
+  position: fixed;
+  z-index: 80;
+}
+
+.dbCheck {
+  background: var(--interactive-ghost);
+  border: 1px solid var(--border-default);
+  bottom: 18px;
+  color: var(--text-secondary);
+  left: 18px;
+}
+
+.dbCheck:hover {
+  background: var(--interactive-ghost-hover);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.errorBadge {
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-500);
+  bottom: 18px;
+  color: var(--danger-500);
+  right: 18px;
+}
+
+.errorDetails {
+  display: grid;
+  gap: 8px 14px;
+  grid-template-columns: 120px minmax(0, 1fr);
+}
+
+.errorDetails dt {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.errorDetails dd {
+  color: var(--text-primary);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 767px) {
+  .content {
+    padding: var(--space-4);
+  }
+
+  .dbCheck {
+    bottom: 14px;
+    left: 14px;
+  }
+
+  .errorBadge {
+    bottom: 14px;
+    right: 14px;
+  }
+}
